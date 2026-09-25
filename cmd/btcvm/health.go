@@ -63,6 +63,7 @@ func (h *healthChecker) run(state *pegState, loadErr error) []check {
 	}
 
 	checks = append(checks, h.bitcoinNode())
+	checks = append(checks, h.walletSize())
 	checks = append(checks, h.bitcoinVM())
 	if h.validationID != "" {
 		checks = append(checks, h.validatorBalance())
@@ -95,6 +96,25 @@ func (h *healthChecker) bridgeLiveness(s *pegState) check {
 		}
 	}
 	return check{"bridge", true, "nothing overdue"}
+}
+
+// walletAlertTxs is when the wallet's history is large enough to warrant a
+// look: the bridge stops at a million entries (see txsFor), and outsiders
+// can add entries by paying the peg's public addresses.
+const walletAlertTxs = 100_000
+
+func (h *healthChecker) walletSize() check {
+	rpc := h.b.btc.(*btcChain).rpc
+	var info struct {
+		TxCount int64 `json:"txcount"`
+	}
+	if err := rpc.call(&info, "getwalletinfo"); err != nil {
+		return check{"wallet", false, "can't read the Bitcoin wallet: " + err.Error()}
+	}
+	if info.TxCount >= walletAlertTxs {
+		return check{"wallet", false, fmt.Sprintf("%d transactions: the bridge stops at a million; find what is filling it", info.TxCount)}
+	}
+	return check{"wallet", true, fmt.Sprintf("%d transactions", info.TxCount)}
 }
 
 func (h *healthChecker) bitcoinNode() check {

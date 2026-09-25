@@ -55,6 +55,8 @@ Bridge (peg signers):
   btcvm audit -signers FILE                  check the peg is fully backed
   btcvm refund -signers FILE -list           deposits that are held or not yet credited
   btcvm refund -signers FILE -deposit TXID:VOUT [-to BTCADDR]
+  btcvm import-deposit -signers FILE -txid TXID [-block HASH]
+      add a deposit paid before its address was registered
       return a held deposit, less the Bitcoin fee, to its sender (or -to)
   btcvm monitor -signers FILE [-webhook URL]  alert when a health check fails
   btcvm pause -signers FILE -reason TEXT     emergency stop: sign and pay nothing (a signer: -dir DIR)
@@ -145,6 +147,7 @@ func main() {
 		"bridge":          cmdBridge,
 		"audit":           cmdAudit,
 		"refund":          cmdRefund,
+		"import-deposit":  cmdImportDeposit,
 		"monitor":         cmdMonitor,
 		"signer":          cmdSigner,
 		"signer-key":      cmdSignerKey,
@@ -869,5 +872,38 @@ func cmdRefund(args []string) error {
 	}
 	destAddr, _ := dest.address(s.btcParams)
 	printJSON(map[string]string{"refundTxid": txid.String(), "to": destAddr.EncodeAddress()})
+	return nil
+}
+
+// cmdImportDeposit adds to the bridge's wallet a deposit paid to a personal
+// deposit address before the address was registered: the wallet watches an
+// address only from registration on, and a pruned node can't rescan far
+// back. This node proves the transaction is in the chain (gettxoutproof);
+// a pruned node needs -block, the hash of the block holding it, and must
+// still have that block.
+func cmdImportDeposit(args []string) error {
+	var s settings
+	fs := flag.NewFlagSet("import-deposit", flag.ExitOnError)
+	signersPath := fs.String("signers", "", "peg signer set file (public keys are enough)")
+	txidFlag := fs.String("txid", "", "the deposit transaction")
+	block := fs.String("block", "", "hash of the block holding it (needed on a pruned node without -txindex)")
+	if err := parseFlags(fs, &s, args); err != nil {
+		return err
+	}
+	if err := required(map[string]string{"signers": *signersPath, "txid": *txidFlag}); err != nil {
+		return err
+	}
+	txid, err := chainhash.NewHashFromStr(*txidFlag)
+	if err != nil {
+		return fmt.Errorf("-txid: %w", err)
+	}
+	c := &btcChain{rpc: s.btcRPCClient()}
+	if err := c.ensureWallet(); err != nil {
+		return err
+	}
+	if err := c.importTx(*txid, *block); err != nil {
+		return err
+	}
+	fmt.Printf("imported %v; the bridge sees it on its next pass if it pays a registered deposit address\n", txid)
 	return nil
 }

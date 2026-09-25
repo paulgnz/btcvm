@@ -64,7 +64,7 @@ The monitor checks every minute and alerts on Telegram when a check changes.
 bv refund -signers $S/signers.json -list     # held or not yet credited, and why
 ```
 
-- **Waiting for confirmations** (6 by default, fewer for small deposits; about 10 minutes each): nothing to do.
+- **Waiting for confirmations** (2 for up to 0.001 BTC, 3 up to 0.005, 6 above; about 10 minutes each): nothing to do.
 - **Waiting for room under the circulating cap:** it's credited when there is room, or refund it.
 - **Above the maximum deposit, below the minimum, or no destination:** refund it.
 
@@ -72,6 +72,19 @@ bv refund -signers $S/signers.json -list     # held or not yet credited, and why
 bv refund -signers $S/signers.json -deposit TXID:VOUT            # back to the sender
 bv refund -signers $S/signers.json -deposit TXID:VOUT -to BTCADDR
 ```
+
+- **Not listed at all:** the deposit was probably paid to a personal deposit
+  address before the address was registered (anyone can work the address out
+  from the signers' keys, but the bridge watches it only from registration
+  on). Register it, if it isn't, then import the payment. The node is pruned,
+  so name the block holding it (from a public explorer); it must be recent
+  enough that the node still has the block:
+
+  ```sh
+  bv import-deposit -signers $S/signers.public.json -txid TXID -block BLOCKHASH
+  ```
+
+  It's then credited, or held for a refund, on the bridge's next pass.
 
 With separate signers, each operator first adds `TXID:VOUT BTCADDR` to their
 `-refund-approvals` file.
