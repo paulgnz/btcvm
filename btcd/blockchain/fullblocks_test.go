@@ -12,15 +12,15 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/MetalBlockchain/dogecoin-vm/btcd/blockchain"
-	"github.com/MetalBlockchain/dogecoin-vm/btcd/blockchain/fullblocktests"
-	"github.com/MetalBlockchain/dogecoin-vm/btcd/btcutil"
-	"github.com/MetalBlockchain/dogecoin-vm/btcd/chaincfg"
-	"github.com/MetalBlockchain/dogecoin-vm/btcd/chaincfg/chainhash"
-	"github.com/MetalBlockchain/dogecoin-vm/btcd/database"
-	_ "github.com/MetalBlockchain/dogecoin-vm/btcd/database/ffldb"
-	"github.com/MetalBlockchain/dogecoin-vm/btcd/txscript"
-	"github.com/MetalBlockchain/dogecoin-vm/btcd/wire"
+	"github.com/MetalBlockchain/btcvm/btcd/blockchain"
+	"github.com/MetalBlockchain/btcvm/btcd/blockchain/fullblocktests"
+	"github.com/MetalBlockchain/btcvm/btcd/btcutil"
+	"github.com/MetalBlockchain/btcvm/btcd/chaincfg"
+	"github.com/MetalBlockchain/btcvm/btcd/chaincfg/chainhash"
+	"github.com/MetalBlockchain/btcvm/btcd/database"
+	_ "github.com/MetalBlockchain/btcvm/btcd/database/ffldb"
+	"github.com/MetalBlockchain/btcvm/btcd/txscript"
+	"github.com/MetalBlockchain/btcvm/btcd/wire"
 )
 
 const (

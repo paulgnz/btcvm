@@ -7,8 +7,8 @@ package main
 import (
 	"time"
 
-	"github.com/MetalBlockchain/dogecoin-vm/btcd/chaincfg/chainhash"
-	"github.com/MetalBlockchain/dogecoin-vm/btcd/database"
+	"github.com/MetalBlockchain/btcvm/btcd/chaincfg/chainhash"
+	"github.com/MetalBlockchain/btcvm/btcd/database"
 )
 
 // headersCmd defines the configuration options for the loadheaders command.

@@ -9,7 +9,7 @@ import (
 	"reflect"
 	"testing"
 
-	"github.com/MetalBlockchain/dogecoin-vm/btcd/wire"
+	"github.com/MetalBlockchain/btcvm/btcd/wire"
 )
 
 // TestPushedData ensured the PushedData function extracts the expected data out

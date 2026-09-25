@@ -5,7 +5,7 @@
 package psbt
 
 import (
-	"github.com/MetalBlockchain/dogecoin-vm/btcd/wire"
+	"github.com/MetalBlockchain/btcvm/btcd/wire"
 )
 
 // MinTxVersion is the lowest transaction version that we'll permit.

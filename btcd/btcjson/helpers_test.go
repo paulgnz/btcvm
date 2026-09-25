@@ -8,7 +8,7 @@ import (
 	"reflect"
 	"testing"
 
-	"github.com/MetalBlockchain/dogecoin-vm/btcd/btcjson"
+	"github.com/MetalBlockchain/btcvm/btcd/btcjson"
 )
 
 // TestHelpers tests the various helper functions which create pointers to

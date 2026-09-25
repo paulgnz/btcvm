@@ -4,7 +4,7 @@ import (
 	"bytes"
 	"testing"
 
-	"github.com/MetalBlockchain/dogecoin-vm/btcd/wire"
+	"github.com/MetalBlockchain/btcvm/btcd/wire"
 )
 
 // TestParsePkScript ensures that the supported script types can be parsed

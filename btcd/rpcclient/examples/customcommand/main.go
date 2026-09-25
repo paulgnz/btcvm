@@ -9,8 +9,8 @@ import (
 	"encoding/json"
 	"log"
 
-	"github.com/MetalBlockchain/dogecoin-vm/btcd/btcjson"
-	"github.com/MetalBlockchain/dogecoin-vm/btcd/rpcclient"
+	"github.com/MetalBlockchain/btcvm/btcd/btcjson"
+	"github.com/MetalBlockchain/btcvm/btcd/rpcclient"
 )
 
 // NameShowCmd defines the name_show JSON-RPC command.

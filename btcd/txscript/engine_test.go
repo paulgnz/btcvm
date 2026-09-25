@@ -8,8 +8,8 @@ package txscript
 import (
 	"testing"
 
-	"github.com/MetalBlockchain/dogecoin-vm/btcd/chaincfg/chainhash"
-	"github.com/MetalBlockchain/dogecoin-vm/btcd/wire"
+	"github.com/MetalBlockchain/btcvm/btcd/chaincfg/chainhash"
+	"github.com/MetalBlockchain/btcvm/btcd/wire"
 )
 
 // TestBadPC sets the pc to a deliberately bad result then confirms that Step

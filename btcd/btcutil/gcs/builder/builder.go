@@ -11,10 +11,10 @@ import (
 	"io"
 	"math"
 
-	"github.com/MetalBlockchain/dogecoin-vm/btcd/btcutil/gcs"
-	"github.com/MetalBlockchain/dogecoin-vm/btcd/chaincfg/chainhash"
-	"github.com/MetalBlockchain/dogecoin-vm/btcd/txscript"
-	"github.com/MetalBlockchain/dogecoin-vm/btcd/wire"
+	"github.com/MetalBlockchain/btcvm/btcd/btcutil/gcs"
+	"github.com/MetalBlockchain/btcvm/btcd/chaincfg/chainhash"
+	"github.com/MetalBlockchain/btcvm/btcd/txscript"
+	"github.com/MetalBlockchain/btcvm/btcd/wire"
 )
 
 const (

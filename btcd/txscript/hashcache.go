@@ -11,8 +11,8 @@ import (
 	"math"
 	"sync"
 
-	"github.com/MetalBlockchain/dogecoin-vm/btcd/chaincfg/chainhash"
-	"github.com/MetalBlockchain/dogecoin-vm/btcd/wire"
+	"github.com/MetalBlockchain/btcvm/btcd/chaincfg/chainhash"
+	"github.com/MetalBlockchain/btcvm/btcd/wire"
 )
 
 // calcHashPrevOuts calculates a single hash of all the previous outputs

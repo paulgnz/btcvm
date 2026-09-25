@@ -12,8 +12,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/MetalBlockchain/dogecoin-vm/btcd/addrmgr"
-	"github.com/MetalBlockchain/dogecoin-vm/btcd/wire"
+	"github.com/MetalBlockchain/btcvm/btcd/addrmgr"
+	"github.com/MetalBlockchain/btcvm/btcd/wire"
 )
 
 // naTest is used to describe a test to be performed against the NetAddressKey

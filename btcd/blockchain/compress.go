@@ -5,8 +5,8 @@
 package blockchain
 
 import (
-	"github.com/MetalBlockchain/dogecoin-vm/btcd/btcec/v2"
-	"github.com/MetalBlockchain/dogecoin-vm/btcd/txscript"
+	"github.com/MetalBlockchain/btcvm/btcd/btcec/v2"
+	"github.com/MetalBlockchain/btcvm/btcd/txscript"
 )
 
 // -----------------------------------------------------------------------------

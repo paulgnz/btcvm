@@ -22,16 +22,16 @@ import (
 	"strings"
 	"time"
 
-	"github.com/MetalBlockchain/dogecoin-vm/btcd/blockchain"
-	"github.com/MetalBlockchain/dogecoin-vm/btcd/btcutil"
-	"github.com/MetalBlockchain/dogecoin-vm/btcd/chaincfg"
-	"github.com/MetalBlockchain/dogecoin-vm/btcd/chaincfg/chainhash"
-	"github.com/MetalBlockchain/dogecoin-vm/btcd/connmgr"
-	"github.com/MetalBlockchain/dogecoin-vm/btcd/database"
-	_ "github.com/MetalBlockchain/dogecoin-vm/btcd/database/ffldb"
-	"github.com/MetalBlockchain/dogecoin-vm/btcd/mempool"
-	"github.com/MetalBlockchain/dogecoin-vm/btcd/peer"
-	"github.com/MetalBlockchain/dogecoin-vm/btcd/wire"
+	"github.com/MetalBlockchain/btcvm/btcd/blockchain"
+	"github.com/MetalBlockchain/btcvm/btcd/btcutil"
+	"github.com/MetalBlockchain/btcvm/btcd/chaincfg"
+	"github.com/MetalBlockchain/btcvm/btcd/chaincfg/chainhash"
+	"github.com/MetalBlockchain/btcvm/btcd/connmgr"
+	"github.com/MetalBlockchain/btcvm/btcd/database"
+	_ "github.com/MetalBlockchain/btcvm/btcd/database/ffldb"
+	"github.com/MetalBlockchain/btcvm/btcd/mempool"
+	"github.com/MetalBlockchain/btcvm/btcd/peer"
+	"github.com/MetalBlockchain/btcvm/btcd/wire"
 	"github.com/btcsuite/go-socks/socks"
 	flags "github.com/jessevdk/go-flags"
 )
@@ -46,9 +46,9 @@ const (
 	defaultBanDuration           = time.Hour * 24
 	defaultBanThreshold          = 100
 	defaultConnectTimeout        = time.Second * 30
-	defaultMaxRPCClients         = 10
-	defaultMaxRPCWebsockets      = 25
-	defaultMaxRPCConcurrentReqs  = 20
+	defaultMaxRPCClients         = 100
+	defaultMaxRPCWebsockets      = 100
+	defaultMaxRPCConcurrentReqs  = 100
 	defaultDbType                = "ffldb"
 	defaultTrickleInterval       = peer.DefaultTrickleInterval
 	defaultBlockMinSize          = 0

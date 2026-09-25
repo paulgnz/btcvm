@@ -10,7 +10,7 @@ import (
 	"math/rand"
 	"testing"
 
-	"github.com/MetalBlockchain/dogecoin-vm/btcd/chaincfg/chainhash"
+	"github.com/MetalBlockchain/btcvm/btcd/chaincfg/chainhash"
 )
 
 // BenchmarkMsgCFCheckptDecode benchmarks decoding of MsgCFCheckpt messages

@@ -16,11 +16,11 @@ import (
 	"testing"
 	"time"
 
-	"github.com/MetalBlockchain/dogecoin-vm/btcd/blockchain"
-	"github.com/MetalBlockchain/dogecoin-vm/btcd/chaincfg"
-	"github.com/MetalBlockchain/dogecoin-vm/btcd/chaincfg/chainhash"
-	"github.com/MetalBlockchain/dogecoin-vm/btcd/integration/rpctest"
-	"github.com/MetalBlockchain/dogecoin-vm/btcd/rpcclient"
+	"github.com/MetalBlockchain/btcvm/btcd/blockchain"
+	"github.com/MetalBlockchain/btcvm/btcd/chaincfg"
+	"github.com/MetalBlockchain/btcvm/btcd/chaincfg/chainhash"
+	"github.com/MetalBlockchain/btcvm/btcd/integration/rpctest"
+	"github.com/MetalBlockchain/btcvm/btcd/rpcclient"
 )
 
 func testGetBestBlock(r *rpctest.Harness, t *testing.T) {

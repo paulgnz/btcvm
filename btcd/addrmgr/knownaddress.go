@@ -8,7 +8,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/MetalBlockchain/dogecoin-vm/btcd/wire"
+	"github.com/MetalBlockchain/btcvm/btcd/wire"
 )
 
 // KnownAddress tracks information about a known network address that is used

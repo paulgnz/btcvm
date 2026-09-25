@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"math"
 
-	"github.com/MetalBlockchain/dogecoin-vm/btcd/btcutil"
+	"github.com/MetalBlockchain/btcvm/btcd/btcutil"
 )
 
 func ExampleAmount() {

@@ -8,8 +8,8 @@ import (
 	"reflect"
 	"time"
 
-	"github.com/MetalBlockchain/dogecoin-vm/btcd/chaincfg/chainhash"
-	"github.com/MetalBlockchain/dogecoin-vm/btcd/rpcclient"
+	"github.com/MetalBlockchain/btcvm/btcd/chaincfg/chainhash"
+	"github.com/MetalBlockchain/btcvm/btcd/rpcclient"
 )
 
 // JoinType is an enum representing a particular type of "node join". A node

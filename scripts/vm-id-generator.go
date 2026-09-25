@@ -3,7 +3,7 @@ package main
 import (
 	"fmt"
 
-	"github.com/MetalBlockchain/dogecoin-vm/vm"
+	"github.com/MetalBlockchain/btcvm/vm"
 )
 
 func main() {

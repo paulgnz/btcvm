@@ -1,12 +1,12 @@
-module github.com/MetalBlockchain/dogecoin-vm/btcd/btcutil/psbt
+module github.com/MetalBlockchain/btcvm/btcd/btcutil/psbt
 
 go 1.22
 
 require (
-	github.com/MetalBlockchain/dogecoin-vm/btcd v0.24.2
-	github.com/MetalBlockchain/dogecoin-vm/btcd/btcec/v2 v2.3.4
-	github.com/MetalBlockchain/dogecoin-vm/btcd/btcutil v1.1.5
-	github.com/MetalBlockchain/dogecoin-vm/btcd/chaincfg/chainhash v1.1.0
+	github.com/MetalBlockchain/btcvm/btcd v0.24.2
+	github.com/MetalBlockchain/btcvm/btcd/btcec/v2 v2.3.4
+	github.com/MetalBlockchain/btcvm/btcd/btcutil v1.1.5
+	github.com/MetalBlockchain/btcvm/btcd/chaincfg/chainhash v1.1.0
 	github.com/davecgh/go-spew v1.1.1
 	github.com/stretchr/testify v1.8.4
 )

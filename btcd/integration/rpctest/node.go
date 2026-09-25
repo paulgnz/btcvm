@@ -13,8 +13,8 @@ import (
 	"runtime"
 	"time"
 
-	"github.com/MetalBlockchain/dogecoin-vm/btcd/btcutil"
-	rpc "github.com/MetalBlockchain/dogecoin-vm/btcd/rpcclient"
+	"github.com/MetalBlockchain/btcvm/btcd/btcutil"
+	rpc "github.com/MetalBlockchain/btcvm/btcd/rpcclient"
 )
 
 // nodeConfig contains all the args, and data required to launch a btcd process

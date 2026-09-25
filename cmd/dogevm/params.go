@@ -3,8 +3,8 @@ package main
 import (
 	"fmt"
 
-	btcd "github.com/MetalBlockchain/dogecoin-vm/btcd"
-	"github.com/MetalBlockchain/dogecoin-vm/btcd/chaincfg"
+	btcd "github.com/MetalBlockchain/btcvm/btcd"
+	"github.com/MetalBlockchain/btcvm/btcd/chaincfg"
 )
 
 const koinuPerDoge = 1e8

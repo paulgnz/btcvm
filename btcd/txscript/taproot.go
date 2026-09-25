@@ -8,10 +8,10 @@ import (
 	"bytes"
 	"fmt"
 
-	"github.com/MetalBlockchain/dogecoin-vm/btcd/btcec/v2"
-	"github.com/MetalBlockchain/dogecoin-vm/btcd/btcec/v2/schnorr"
-	"github.com/MetalBlockchain/dogecoin-vm/btcd/chaincfg/chainhash"
-	"github.com/MetalBlockchain/dogecoin-vm/btcd/wire"
+	"github.com/MetalBlockchain/btcvm/btcd/btcec/v2"
+	"github.com/MetalBlockchain/btcvm/btcd/btcec/v2/schnorr"
+	"github.com/MetalBlockchain/btcvm/btcd/chaincfg/chainhash"
+	"github.com/MetalBlockchain/btcvm/btcd/wire"
 	secp "github.com/decred/dcrd/dcrec/secp256k1/v4"
 )
 

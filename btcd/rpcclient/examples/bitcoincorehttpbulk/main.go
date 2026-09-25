@@ -8,7 +8,7 @@ import (
 	"fmt"
 	"log"
 
-	"github.com/MetalBlockchain/dogecoin-vm/btcd/rpcclient"
+	"github.com/MetalBlockchain/btcvm/btcd/rpcclient"
 )
 
 func main() {

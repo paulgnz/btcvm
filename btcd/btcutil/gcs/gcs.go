@@ -11,7 +11,7 @@ import (
 	"io"
 	"sort"
 
-	"github.com/MetalBlockchain/dogecoin-vm/btcd/wire"
+	"github.com/MetalBlockchain/btcvm/btcd/wire"
 	"github.com/aead/siphash"
 	"github.com/kkdai/bstream"
 )

@@ -4,9 +4,9 @@ import (
 	"bytes"
 	"encoding/binary"
 
-	"github.com/MetalBlockchain/dogecoin-vm/btcd/btcutil/base58"
-	"github.com/MetalBlockchain/dogecoin-vm/btcd/btcutil/hdkeychain"
-	"github.com/MetalBlockchain/dogecoin-vm/btcd/chaincfg/chainhash"
+	"github.com/MetalBlockchain/btcvm/btcd/btcutil/base58"
+	"github.com/MetalBlockchain/btcvm/btcd/btcutil/hdkeychain"
+	"github.com/MetalBlockchain/btcvm/btcd/chaincfg/chainhash"
 )
 
 const (

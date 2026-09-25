@@ -25,8 +25,8 @@
 //	        "fmt"
 //	        "log"
 //
-//	        "github.com/MetalBlockchain/dogecoin-vm/btcd/btcutil"
-//	        "github.com/MetalBlockchain/dogecoin-vm/btcd/chaincfg"
+//	        "github.com/MetalBlockchain/btcvm/btcd/btcutil"
+//	        "github.com/MetalBlockchain/btcvm/btcd/chaincfg"
 //	)
 //
 //	var testnet = flag.Bool("testnet", false, "operate on the testnet Bitcoin network")

@@ -9,7 +9,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/MetalBlockchain/dogecoin-vm/btcd/wire"
+	"github.com/MetalBlockchain/btcvm/btcd/wire"
 	"github.com/davecgh/go-spew/spew"
 )
 
