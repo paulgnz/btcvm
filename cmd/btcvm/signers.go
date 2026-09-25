@@ -85,6 +85,17 @@ func (s *signerSet) fingerprint() string {
 	return strings.Join([]string{h[0:4], h[4:8], h[8:12], h[12:16], h[16:20]}, "-")
 }
 
+// refuseKeys fails if the set holds private keys, for processes that
+// never sign: the web server and the monitor face the internet or run
+// unattended, and holding keys there would put the peg behind them.
+func (s *signerSet) refuseKeys(process string, allowed bool) error {
+	if len(s.PrivateKeys) > 0 && !allowed {
+		return fmt.Errorf("%s never signs, so its signer set must hold no private keys: give it a public copy "+
+			"(jq 'del(.privateKeys)' signers.json > signers.public.json), or -allow-signing-keys for local development", process)
+	}
+	return nil
+}
+
 // publicCopy is the set without private keys.
 func (s *signerSet) publicCopy() *signerSet {
 	c := *s

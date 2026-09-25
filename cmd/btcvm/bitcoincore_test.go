@@ -456,3 +456,33 @@ func TestLateSignerKnowsPayoutByWitness(t *testing.T) {
 	}
 	require.ErrorContains(err, "already done in "+payment.String())
 }
+
+// TestFailedImportIsRetried: when the wallet can't import a new deposit
+// address, the registration is recorded but the next request imports it,
+// rather than leaving it recorded and unwatched.
+func TestFailedImportIsRetried(t *testing.T) {
+	require := require.New(t)
+	n := startRegtest(t)
+	h := newHarness(t)
+	c := &btcChain{rpc: n.settings.btcRPCClient()}
+	require.NoError(c.ensureWallet())
+	h.b.btc, h.b.btcParams = c, &chaincfg.RegressionNetParams
+
+	require.NoError(n.node.call(nil, "unloadwallet", "btcvm"))
+	alice := h.user(1)
+	_, err := registerDeposit(h.b, alice)
+	require.Error(err, "the wallet isn't loaded")
+	known, err := h.b.registry.has(alice)
+	require.NoError(err)
+	require.True(known, "the registration itself was recorded")
+
+	require.NoError(n.node.call(nil, "loadwallet", "btcvm"))
+	addr, err := registerDeposit(h.b, alice)
+	require.NoError(err)
+	var info struct {
+		IsWatchOnly bool `json:"iswatchonly"`
+		IsMine      bool `json:"ismine"`
+	}
+	require.NoError(c.rpc.call(&info, "getaddressinfo", addr.EncodeAddress()))
+	require.True(info.IsMine || info.IsWatchOnly, "the retry imported it")
+}

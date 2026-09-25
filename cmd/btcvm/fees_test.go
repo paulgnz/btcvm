@@ -419,3 +419,17 @@ func TestPegSpendKnownByWitness(t *testing.T) {
 	require.True(ok)
 	require.Equal(alice, *d)
 }
+
+// TestRefundWaitsForTheBridge: a refund can't take the lock the running
+// bridge holds, so the two can't credit and refund one deposit.
+func TestRefundWaitsForTheBridge(t *testing.T) {
+	signersPath := t.TempDir() + "/signers.json"
+	running, err := lockBridge(signersPath)
+	require.NoError(t, err)
+	_, err = lockBridge(signersPath)
+	require.ErrorIs(t, err, errBridgeRunning)
+	require.NoError(t, running.Close())
+	again, err := lockBridge(signersPath)
+	require.NoError(t, err, "free once the bridge stops")
+	again.Close()
+}

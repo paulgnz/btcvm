@@ -59,7 +59,8 @@ type server struct {
 	// scan finds the unspent outputs of imported addresses (btcscan.go).
 	scan *scanner
 
-	registerLimit *rateLimit
+	registerLimit *rateLimit // new registrations per client network
+	registerTotal *rateLimit // new registrations in all
 }
 
 // btcSync is the part of Bitcoin Core's getblockchaininfo the page shows
@@ -506,8 +507,19 @@ func (srv *server) depositAddress(r *http.Request) (any, error) {
 	if err != nil {
 		return nil, err
 	}
-	if !srv.registerLimit.allow(clientIP(r)) {
-		return nil, &apiError{http.StatusTooManyRequests, "too many new deposit addresses from this IP; try later"}
+	// Only new registrations count against the limits: each is permanent,
+	// and one more address every load of the bridge reads.
+	known, err := srv.b.registry.has(dest)
+	if err != nil {
+		return nil, err
+	}
+	if !known {
+		if !srv.registerLimit.allow(limitKey(r)) {
+			return nil, &apiError{http.StatusTooManyRequests, "too many new deposit addresses from this network; try later"}
+		}
+		if !srv.registerTotal.allow("*") {
+			return nil, &apiError{http.StatusTooManyRequests, "too many new deposit addresses right now; try later"}
+		}
 	}
 	depositAddr, err := registerDeposit(srv.b, dest)
 	if err != nil {
@@ -644,6 +656,16 @@ func clientIP(r *http.Request) string {
 	return host
 }
 
+// limitKey is who a request counts against for rate limits: its IPv4
+// address, or its IPv6 /64, which one user typically has all of.
+func limitKey(r *http.Request) string {
+	ip := net.ParseIP(clientIP(r))
+	if ip == nil || ip.To4() != nil {
+		return clientIP(r)
+	}
+	return ip.Mask(net.CIDRMask(64, 128)).String() + "/64"
+}
+
 // rateLimit allows each key n events per window.
 type rateLimit struct {
 	n      int
@@ -714,6 +736,7 @@ func cmdServe(args []string) error {
 	faucetKey := flags.String("faucet-key", "", "private key (WIF or hex) of the faucet's BTCVM address; empty disables the faucet")
 	faucetAmount := flags.String("faucet-amount", "100", "BTC per faucet claim")
 	chainID := flags.String("chain-id", "", "the BTCVM chain's ID on Metal, shown on the page")
+	allowKeys := flags.Bool("allow-signing-keys", false, "accept a signer set with private keys (local development only)")
 	btcIndexPath := flags.String("btc-index", "", "directory for the wallet's Bitcoin address index (default: btcindex next to -signers; \"off\" disables Bitcoin balances)")
 	s.register(flags)
 	b := bridgeFlags(flags)
@@ -732,6 +755,9 @@ func cmdServe(args []string) error {
 	if err != nil {
 		return err
 	}
+	if err := signers.refuseKeys("btcvm serve", *allowKeys); err != nil {
+		return err
+	}
 	if err := b.connect(&s, signers); err != nil {
 		return err
 	}
@@ -745,6 +771,7 @@ func cmdServe(args []string) error {
 		btc:           b.btc.(*btcChain),
 		scan:          newScanner(b.btc.(*btcChain).rpc),
 		registerLimit: newRateLimit(30, time.Hour),
+		registerTotal: newRateLimit(500, time.Hour),
 		prevOuts:      map[wire.OutPoint]*wire.TxOut{},
 		heavy:         make(chan struct{}, 8),
 	}

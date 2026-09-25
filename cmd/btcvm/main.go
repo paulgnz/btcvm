@@ -572,13 +572,16 @@ func registerDeposit(b *bridge, dest destination) (btcutil.Address, error) {
 	if err != nil {
 		return nil, err
 	}
-	if added {
-		// Nothing can have been sent to a new address, so no rescan.
-		if dc, ok := b.btc.(*btcChain); ok {
-			if err := dc.watch(addr, false); err != nil {
-				return nil, err
-			}
+	// Watch it unless this process already has: a registration whose
+	// import failed is retried on the next request, rather than left
+	// recorded but unwatched. Nothing can have been sent to a new address,
+	// so no rescan.
+	if dc, ok := b.btc.(*btcChain); ok {
+		if err := dc.watchOnce(addr); err != nil {
+			return nil, err
 		}
+	}
+	if added {
 		// Tell the remote signers now, so their nodes watch the address
 		// before anything arrives at it. A signer that misses this learns
 		// of the address from the first proposal that involves it.
@@ -661,6 +664,11 @@ func cmdBridge(args []string) error {
 	if err != nil {
 		return err
 	}
+	lock, err := lockBridge(*signersPath)
+	if err != nil {
+		return fmt.Errorf("another bridge is using this signer set: %w", err)
+	}
+	defer lock.Close()
 	if err := b.connect(&s, signers); err != nil {
 		return err
 	}
@@ -849,6 +857,12 @@ func cmdRefund(args []string) error {
 	} else if dest, err = b.btc.(*btcChain).sender(op.Hash); err != nil {
 		return fmt.Errorf("finding the deposit's sender (pass -to): %w", err)
 	}
+	// A refund and the running bridge must not act at once.
+	lock, err := lockBridge(*signersPath)
+	if err != nil {
+		return err
+	}
+	defer lock.Close()
 	txid, err := b.refund(op, dest, *force)
 	if err != nil {
 		return err

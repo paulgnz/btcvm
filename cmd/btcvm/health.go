@@ -316,6 +316,7 @@ func cmdMonitor(args []string) error {
 	interval := fs.Duration("interval", time.Minute, "time between checks")
 	remind := fs.Duration("remind", 6*time.Hour, "repeat an alert this often while a check fails")
 	once := fs.Bool("once", false, "run the checks once, print them, and exit non-zero if one fails")
+	allowKeys := fs.Bool("allow-signing-keys", false, "accept a signer set with private keys (local development only)")
 	s.register(fs)
 	b := bridgeFlags(fs)
 	h := &healthChecker{b: b}
@@ -331,6 +332,9 @@ func cmdMonitor(args []string) error {
 	}
 	signers, err := readSignerSet(*signersPath)
 	if err != nil {
+		return err
+	}
+	if err := signers.refuseKeys("btcvm monitor", *allowKeys); err != nil {
 		return err
 	}
 	if err := b.connect(&s, signers); err != nil {

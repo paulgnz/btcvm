@@ -51,8 +51,9 @@ func (srv *server) btcWatch(r *http.Request) (any, error) {
 	if err != nil {
 		return nil, err
 	}
-	if _, watched := srv.btcIdx.isWatched(script); !watched && !srv.registerLimit.allow(clientIP(r)) {
-		return nil, &apiError{http.StatusTooManyRequests, "too many new addresses from this IP; try later"}
+	if _, watched := srv.btcIdx.isWatched(script); !watched &&
+		(!srv.registerLimit.allow(limitKey(r)) || !srv.registerTotal.allow("*")) {
+		return nil, &apiError{http.StatusTooManyRequests, "too many new addresses right now; try later"}
 	}
 	from, err := srv.btcIdx.watch(script)
 	if err != nil {

@@ -175,8 +175,31 @@ func sendRaw(rpc *rpcClient, tx *wire.MsgTx) (chainhash.Hash, error) {
 type btcChain struct {
 	rpc *rpcClient // the wallet's endpoint, .../wallet/NAME
 
-	mu    sync.Mutex
-	known map[string]*knownTx // wallet transactions read so far, by txid
+	mu      sync.Mutex
+	known   map[string]*knownTx // wallet transactions read so far, by txid
+	watched map[string]bool     // addresses this process has had the wallet watch
+}
+
+// watchOnce has the wallet watch address from now on, unless this process
+// already has: calling it on every registration, not only new ones,
+// retries an import that failed.
+func (c *btcChain) watchOnce(address btcutil.Address) error {
+	c.mu.Lock()
+	done := c.watched[address.EncodeAddress()]
+	c.mu.Unlock()
+	if done {
+		return nil
+	}
+	if err := c.watch(address, false); err != nil {
+		return err
+	}
+	c.mu.Lock()
+	if c.watched == nil {
+		c.watched = map[string]bool{}
+	}
+	c.watched[address.EncodeAddress()] = true
+	c.mu.Unlock()
+	return nil
 }
 
 // walletName is the wallet part of an RPC URL ending in /wallet/NAME.
@@ -356,8 +379,14 @@ func (c *btcChain) txsFor(addresses []btcutil.Address) ([]chainTx, error) {
 		Time             int64    `json:"time"`
 		MempoolConflicts []string `json:"mempoolconflicts"`
 	}
-	if err := c.rpc.callNamed(&entries, "listtransactions", map[string]any{"count": 1_000_000}); err != nil {
+	const maxEntries = 1_000_000
+	if err := c.rpc.callNamed(&entries, "listtransactions", map[string]any{"count": maxEntries}); err != nil {
 		return nil, err
+	}
+	// The listing is newest first: at the cap, older entries (a payout, say)
+	// may be missing, and reading them as absent could pay twice.
+	if len(entries) >= maxEntries {
+		return nil, fmt.Errorf("the wallet lists %d or more transactions; its history can't be read in full", maxEntries)
 	}
 
 	seen := map[string]bool{}
