@@ -13,6 +13,7 @@ import (
 
 	"github.com/stretchr/testify/require"
 
+	"github.com/MetalBlockchain/btcvm/btcd/blockchain"
 	"github.com/MetalBlockchain/btcvm/btcd/btcec/v2"
 	"github.com/MetalBlockchain/btcvm/btcd/btcutil"
 	"github.com/MetalBlockchain/btcvm/btcd/txscript"
@@ -23,20 +24,23 @@ import (
 // app's core is tested against them).
 type walletVectors struct {
 	Keys []struct {
-		Label, Hash160, Address, Wif string
+		Label, Program, Address, Wif string
 	}
 	Deposit struct {
 		Signers struct {
 			Required   int
 			PublicKeys []string
 		}
-		Dest         struct{ Hash160 string }
+		Dest struct {
+			Kind    byte
+			Program string
+		}
 		RedeemScript string
 		Address      string
 	}
 	ReserveScript string
 	Payments      []struct {
-		Name, FromLabel, PrevTx, ToScript, Amount, Data, Tx, Txid, Fee string
+		Name, FromLabel, PrevTx, ToScript, Amount, Data, Tx, Txid, Fee, FeeRate string
 	}
 }
 
@@ -79,9 +83,9 @@ func TestWalletVectors(t *testing.T) {
 
 	signers := &signerSet{Required: v.Deposit.Signers.Required, PublicKeys: v.Deposit.Signers.PublicKeys}
 	require.NoError(signers.load())
-	var dest destination
-	h, _ := hex.DecodeString(v.Deposit.Dest.Hash160)
-	copy(dest.hash[:], h)
+	program, _ := hex.DecodeString(v.Deposit.Dest.Program)
+	dest, err := newDestination(v.Deposit.Dest.Kind, program)
+	require.NoError(err)
 	require.Equal(v.Deposit.RedeemScript, hex.EncodeToString(signers.depositRedeemScript(dest)))
 	depositAddr, err := signers.depositAddress(dest, &chaincfg.MainNetParams)
 	require.NoError(err)
@@ -110,5 +114,10 @@ func TestWalletVectors(t *testing.T) {
 		require.Equal(p.ToScript, hex.EncodeToString(tx.TxOut[0].PkScript), p.Name)
 		require.Equal(p.Amount, strconv.FormatInt(tx.TxOut[0].Value, 10), p.Name)
 		require.Equal(p.Fee, strconv.FormatInt(in-out, 10), p.Name)
+		// The fee pays at least the rate on the real virtual size.
+		rate, err := strconv.ParseInt(p.FeeRate, 10, 64)
+		require.NoError(err, p.Name)
+		vsize := (blockchain.GetTransactionWeight(btcutil.NewTx(tx)) + 3) / 4
+		require.GreaterOrEqual(in-out, rate*vsize, p.Name)
 	}
 }

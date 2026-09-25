@@ -214,8 +214,10 @@ func (srv *server) info(*http.Request) (any, error) {
 
 // addressVersions are the base58 version bytes the web wallet needs to
 // encode and check addresses and keys for a network.
-func addressVersions(p *chaincfg.Params) map[string]byte {
-	return map[string]byte{"p2pkh": p.PubKeyHashAddrID, "p2sh": p.ScriptHashAddrID, "wif": p.PrivateKeyID}
+// addressVersions is how a network encodes addresses and keys, for the web
+// wallet.
+func addressVersions(p *chaincfg.Params) map[string]any {
+	return map[string]any{"p2pkh": p.PubKeyHashAddrID, "p2sh": p.ScriptHashAddrID, "wif": p.PrivateKeyID, "hrp": p.Bech32HRPSegwit}
 }
 
 func formatAudit(a audit) map[string]any {

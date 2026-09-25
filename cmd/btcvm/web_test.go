@@ -16,6 +16,7 @@ import (
 
 	"github.com/stretchr/testify/require"
 
+	"github.com/MetalBlockchain/btcvm/btcd/blockchain"
 	"github.com/MetalBlockchain/btcvm/btcd/btcec/v2"
 	"github.com/MetalBlockchain/btcvm/btcd/btcutil"
 	"github.com/MetalBlockchain/btcvm/btcd/txscript"
@@ -119,12 +120,14 @@ func TestWebChainMatchesGo(t *testing.T) {
 	require.NoError(err)
 	require.NoError(vm.Execute())
 
-	// Change returns to the sender, and the fee is at the wallet rate.
+	// Change returns to the sender, and the fee is the BTCVM wallet rate
+	// on the signed transaction's virtual size, rounded up at most a little.
 	require.Len(tx.TxOut, 3)
 	require.Equal(fromScript, tx.TxOut[2].PkScript)
 	fee := int64(500*satPerBTC) - tx.TxOut[0].Value - tx.TxOut[2].Value
-	require.Greater(fee, int64(0))
-	require.LessOrEqual(fee, int64(satPerBTC)) // well under 1 BTC
+	vsize := (blockchain.GetTransactionWeight(btcutil.NewTx(tx)) + 3) / 4
+	require.GreaterOrEqual(fee, 2*vsize)
+	require.LessOrEqual(fee, 2*(vsize+2))
 
 	require.Equal(tx.TxHash().String(), got.TxID)
 	require.Equal(got.TxHex, got.InflatedHex, "an overstated UTXO value changed the transaction")

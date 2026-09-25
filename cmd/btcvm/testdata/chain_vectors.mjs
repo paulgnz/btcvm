@@ -14,6 +14,7 @@ const pay = (utxo, rawTxs) => chain.buildPayment({
   script: chain.unhex(input.toScript),
   amount: BigInt(input.amount),
   data: input.data ? chain.unhex(input.data) : undefined,
+  feeRate: chain.VM_FEE_RATE,
 });
 const payment = await pay(input.utxo, input.rawTxs);
 
@@ -32,11 +33,11 @@ const uncompressed = (() => {
 
 console.log(JSON.stringify({
   vmAddress: chain.encodeAddress(dest, input.vmVersions),
-  dogeAddress: chain.encodeAddress(dest, input.dogeVersions),
+  btcAddress: chain.encodeAddress(dest, input.btcVersions),
   vmWIF: chain.wif(key, input.vmVersions),
-  dogeWIF: chain.wif(key, input.dogeVersions),
-  keyFromWIF: chain.hex(chain.parseKey(chain.wif(key, input.dogeVersions))),
-  depositAddress: chain.depositAddress(dest, input.signers, input.dogeVersions),
+  btcWIF: chain.wif(key, input.btcVersions),
+  keyFromWIF: chain.hex(chain.parseKey(chain.wif(key, input.btcVersions))),
+  depositAddress: chain.depositAddress(dest, input.signers, input.btcVersions),
   txHex: payment.hex,
   txid: payment.txid,
   inflatedHex: inflated.hex,

@@ -1,6 +1,6 @@
 // Checks the web wallet's review step (TestWebReview): a planned payment's
 // outputs decode to what was asked for, the fee and amounts add up, a
-// withdrawal's Dogecoin address reads back from its tag, and signing
+// withdrawal's Bitcoin address reads back from its tag, and signing
 // refuses a plan whose outputs changed after review. Prints "ok".
 //
 // Test keys are sha256 of public labels: this file holds no secret.
@@ -8,9 +8,9 @@ import assert from 'node:assert/strict';
 import * as chain from '../web/chain.js';
 import { sha256 } from '../web/vendor/noble-hashes-1.8.0/sha2.js';
 
-const versions = { p2pkh: 30, p2sh: 22, wif: 158 };
-const key = sha256(new TextEncoder().encode('dogevm review key'));
-const other = chain.keyDestination(sha256(new TextEncoder().encode('dogevm review payee')));
+const versions = { p2pkh: 0, p2sh: 5, wif: 128, hrp: 'bc' };
+const key = sha256(new TextEncoder().encode('btcvm review key'));
+const other = chain.keyDestination(sha256(new TextEncoder().encode('btcvm review payee')));
 const me = chain.keyDestination(key);
 const myScript = chain.pkScript(me);
 
@@ -18,13 +18,13 @@ function u32(n) { const b = new Uint8Array(4); new DataView(b.buffer).setUint32(
 function u64(n) { const b = new Uint8Array(8); new DataView(b.buffer).setBigUint64(0, BigInt(n), true); return b; }
 function cat(...parts) { const o = new Uint8Array(parts.reduce((n, p) => n + p.length, 0)); let i = 0; for (const p of parts) { o.set(p, i); i += p.length; } return o; }
 const prev = cat(u32(1), Uint8Array.of(1), new Uint8Array(32).fill(7), u32(0), Uint8Array.of(1, 0x51), u32(0xffffffff),
-  Uint8Array.of(1), u64(50n * chain.KOINU), Uint8Array.of(myScript.length), myScript, u32(0));
+  Uint8Array.of(1), u64(chain.SATS / 2n), Uint8Array.of(myScript.length), myScript, u32(0));
 const prevId = chain.txid(prev);
-const utxos = [{ txid: prevId, vout: 0, value: String(50n * chain.KOINU), confirmations: 3, script: chain.hex(myScript) }];
+const utxos = [{ txid: prevId, vout: 0, value: String(chain.SATS / 2n), confirmations: 3, script: chain.hex(myScript) }];
 const getRawTx = async () => chain.hex(prev);
 
-// A withdrawal: pay 10 DOGE with a DVMO tag naming a Dogecoin address.
-const amount = 10n * chain.KOINU;
+// A withdrawal: pay 0.1 BTC with a BVMO tag naming a Bitcoin address.
+const amount = chain.SATS / 10n;
 const plan = await chain.planPayment({
   key, utxos, getRawTx, script: chain.pkScript(other), amount, data: chain.pegOutData(other),
 });
@@ -36,6 +36,13 @@ assert.equal(chain.pegOutDestination(outs[1].data, versions), chain.encodeAddres
 assert.equal(outs[2].address, chain.encodeAddress(me, versions)); // change
 assert.equal(outs.reduce((n, o) => n + o.value, 0n) + plan.fee, plan.inputTotal);
 assert.equal(chain.pegOutDestination(new Uint8Array(25), versions), null);
+// A Taproot destination reads back too, and a wrong length does not.
+const tr = { kind: chain.P2TR, hash: sha256(new TextEncoder().encode('taproot')) };
+assert.equal(chain.pegOutDestination(chain.pegOutData(tr), versions), chain.encodeAddress(tr, versions));
+assert.equal(chain.pegOutDestination(chain.pegOutData(tr).slice(0, 25), versions), null);
+assert.match(chain.encodeAddress(tr, versions), /^bc1p/);
+assert.deepEqual(chain.decodeAddress(chain.encodeAddress(tr, versions), versions), tr);
+assert.throws(() => chain.decodeAddress('tb1qw508d6qejxtdg4y5r3zarvary0c5xw7kxpjzsx', versions), /different network/);
 
 // Signing pays exactly what was reviewed, and matches buildPayment.
 const signed = await chain.signPlan(plan, key);

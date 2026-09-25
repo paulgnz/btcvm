@@ -13,8 +13,8 @@ import { sha256 } from '../web/vendor/noble-hashes-1.8.0/sha2.js';
 const enc = new TextEncoder();
 const keyFor = (label) => sha256(enc.encode(label));
 
-// Mainnet address versions, the same on Dogecoin and DogecoinVM.
-const versions = { p2pkh: 30, p2sh: 22, wif: 158 };
+// Mainnet address versions, the same on Bitcoin and BTCVM.
+const versions = { p2pkh: 0, p2sh: 5, wif: 128, hrp: 'bc' };
 
 // A minimal legacy transaction paying outputs, for inputs to spend.
 function u32(n) { const b = new Uint8Array(4); new DataView(b.buffer).setUint32(0, n, true); return b; }
@@ -26,14 +26,14 @@ function prevTx(tag, outputs) {
   return cat(u32(1), Uint8Array.of(1), input, Uint8Array.of(outputs.length), ...outs, u32(0));
 }
 
-const keys = ['dogevm vector key 1', 'dogevm vector key 2', 'dogevm vector key 3'].map((label) => {
+const keys = ['btcvm vector key 1', 'btcvm vector key 2', 'btcvm vector key 3'].map((label) => {
   const key = keyFor(label);
   const dest = chain.keyDestination(key);
   return {
     label, key, dest,
     vector: {
       label,
-      hash160: chain.hex(dest.hash),
+      program: chain.hex(dest.hash),
       address: chain.encodeAddress(dest, versions),
       wif: chain.wif(key, versions),
     },
@@ -45,30 +45,32 @@ const { getPublicKey } = await import('../web/vendor/noble-secp256k1-2.3.0/index
 const signers = { required: 2, publicKeys: keys.map((k) => chain.hex(getPublicKey(k.key, true))) };
 const deposit = {
   signers,
-  dest: { kind: 0, hash160: keys[0].vector.hash160 },
+  dest: { kind: keys[0].dest.kind, program: keys[0].vector.program },
   redeemScript: chain.hex(chain.depositRedeemScript(keys[0].dest, signers)),
   address: chain.depositAddress(keys[0].dest, signers, versions),
 };
-const reserve = chain.decodeAddress(chain.encodeAddress({ kind: 1, hash: (await import('../web/vendor/noble-hashes-1.8.0/legacy.js')).ripemd160(sha256(
-  // The peg multisig: OP_2 <3 keys> OP_3 OP_CHECKMULTISIG.
-  cat(Uint8Array.of(0x52), ...signers.publicKeys.map((h) => cat(Uint8Array.of(33), chain.unhex(h))), Uint8Array.of(0x53, 0xae)),
-)) }, versions), versions);
+// The peg: a P2WSH of the multisig OP_2 <3 keys> OP_3 OP_CHECKMULTISIG.
+const reserve = {
+  kind: chain.P2WSH,
+  hash: sha256(cat(Uint8Array.of(0x52), ...signers.publicKeys.map((h) => cat(Uint8Array.of(33), chain.unhex(h))), Uint8Array.of(0x53, 0xae))),
+};
 
 // Payments from key 1.
 const from = keys[0];
 const fromScript = chain.pkScript(from.dest);
 const D = 100_000_000n;
 const cases = [
-  { name: 'one input with change', coins: [500n * D], to: chain.pkScript(keys[1].dest), amount: 120n * D },
-  { name: 'several inputs, largest first', coins: [3n * D, 5n * D, 7n * D], to: chain.pkScript(keys[1].dest), amount: 11n * D },
-  { name: 'withdrawal with a DVMO tag', coins: [50n * D], to: chain.pkScript(reserve), amount: 20n * D, data: chain.pegOutData(keys[2].dest) },
-  { name: 'deposit to a personal deposit address', coins: [30n * D], to: chain.pkScript(chain.decodeAddress(deposit.address, versions)), amount: 10n * D },
-  { name: 'below the soft dust limit pays the surcharge', coins: [2n * D], to: chain.pkScript(keys[1].dest), amount: D / 200n },
-  { name: 'change below the soft dust limit goes to the fee', coins: [D + D / 100n], to: chain.pkScript(keys[1].dest), amount: D },
-  // DogecoinVM payments pay the relay minimum rather than Dogecoin's
-  // recommended rate.
-  { name: 'DogecoinVM payment at the relay minimum', coins: [3n * D, 5n * D], to: chain.pkScript(keys[1].dest), amount: 6n * D, feePerByte: chain.VM_FEE_PER_BYTE },
-  { name: 'DogecoinVM withdrawal at the relay minimum', coins: [50n * D], to: chain.pkScript(reserve), amount: 20n * D, data: chain.pegOutData(keys[2].dest), feePerByte: chain.VM_FEE_PER_BYTE },
+  { name: 'one input with change', coins: [5n * D], to: chain.pkScript(keys[1].dest), amount: D + D / 5n },
+  { name: 'several inputs, largest first', coins: [D / 100n, 3n * D / 100n, 7n * D / 100n], to: chain.pkScript(keys[1].dest), amount: 9n * D / 100n },
+  { name: 'withdrawal with a BVMO tag', coins: [D / 2n], to: chain.pkScript(reserve), amount: D / 5n, data: chain.pegOutData(keys[2].dest) },
+  { name: 'deposit to a personal deposit address', coins: [3n * D / 10n], to: chain.pkScript(chain.decodeAddress(deposit.address, versions)), amount: D / 10n },
+  { name: 'to a legacy address', coins: [D], to: chain.pkScript({ kind: chain.P2PKH, hash: keys[1].dest.hash }), amount: D / 4n },
+  { name: 'to a Taproot address', coins: [D], to: chain.pkScript({ kind: chain.P2TR, hash: sha256(enc.encode('a taproot key')) }), amount: D / 4n },
+  { name: 'change below the dust limit goes to the fee', coins: [D / 1000n + 1000n], to: chain.pkScript(keys[1].dest), amount: D / 1000n },
+  { name: 'at a high fee rate', coins: [D], to: chain.pkScript(keys[1].dest), amount: D / 2n, feeRate: 80n },
+  // BTCVM payments pay twice the relay minimum.
+  { name: 'BTCVM payment', coins: [3n * D, 5n * D], to: chain.pkScript(keys[1].dest), amount: 6n * D, feeRate: chain.VM_FEE_RATE },
+  { name: 'BTCVM withdrawal', coins: [D / 2n], to: chain.pkScript(reserve), amount: D / 5n, data: chain.pegOutData(keys[2].dest), feeRate: chain.VM_FEE_RATE },
 ];
 
 const payments = [];
@@ -78,7 +80,7 @@ for (const [n, c] of cases.entries()) {
   const utxos = c.coins.map((value, vout) => ({ txid: prevTxid, vout, value: String(value), script: chain.hex(fromScript), confirmations: 1 }));
   const built = await chain.buildPayment({
     key: from.key, utxos, getRawTx: async () => chain.hex(raw),
-    script: c.to, amount: c.amount, data: c.data, feePerByte: c.feePerByte,
+    script: c.to, amount: c.amount, data: c.data, feeRate: c.feeRate,
   });
   payments.push({
     name: c.name,
@@ -91,12 +93,12 @@ for (const [n, c] of cases.entries()) {
     tx: built.hex,
     txid: built.txid,
     fee: String(built.fee),
-    ...(c.feePerByte ? { feePerByte: String(c.feePerByte) } : {}),
+    feeRate: String(c.feeRate ?? chain.BTC_FEE_RATE),
   });
 }
 
 console.log(JSON.stringify({
-  note: 'Generated by cmd/dogevm/testdata/wallet_vectors.mjs from the web wallet. Keys are sha256 of the labels; nothing here is secret.',
+  note: 'Generated by cmd/btcvm/testdata/wallet_vectors.mjs from the web wallet. Keys are sha256 of the labels; nothing here is secret.',
   versions,
   keys: keys.map((k) => k.vector),
   deposit,
