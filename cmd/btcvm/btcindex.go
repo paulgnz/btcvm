@@ -8,7 +8,10 @@ package main
 //
 // It indexes from the block an address was registered at. Payments made
 // before then are not found by following blocks; a user can add one by
-// transaction ID (importTx), which this node checks.
+// transaction ID (importTx), which this node checks against its UTXO set.
+// It keeps the raw bytes of each transaction paying a watched address, so a
+// wallet can check its coins even after a pruned node has dropped their
+// blocks.
 
 import (
 	"bytes"
@@ -18,6 +21,7 @@ import (
 	"errors"
 	"fmt"
 	"log"
+	"math"
 	"sort"
 	"sync"
 	"time"
@@ -37,9 +41,10 @@ type btcSource interface {
 	// blockInfo returns a block's parent, time and transactions, in one call:
 	// a Bitcoin block holds thousands.
 	blockInfo(hash chainhash.Hash) (prev chainhash.Hash, unix int64, txs []*wire.MsgTx, err error)
-	rawTx(txid chainhash.Hash) (*wire.MsgTx, error)
-	txBlock(txid chainhash.Hash) (height int64, unix int64, err error) // height 0: unconfirmed
-	unspentOutput(op wire.OutPoint) (bool, error)
+	rawTx(txid chainhash.Hash) (*wire.MsgTx, error) // mempool transactions, at least
+	// txOut is an output unspent in a block: its value, script and
+	// confirmations, or found false.
+	txOut(op wire.OutPoint) (value int64, script []byte, confirmations int64, found bool, err error)
 	mempool() ([]chainhash.Hash, error)
 }
 
@@ -51,6 +56,7 @@ const (
 	keyHistory = 'h' // h script height txid -> net, unix
 	keyUndo    = 'b' // b height -> undo record
 	keyTip     = 't' // t -> height, hash
+	keyRaw     = 'r' // r txid -> raw transaction paying a watched address
 )
 
 const undoDepth = 288 // blocks of undo kept for reorganisations
@@ -303,9 +309,18 @@ func (x *btcIndex) apply(height int64, hash chainhash.Hash, unix int64, txs []*w
 				net[string(script)] -= i64(v[:8])
 			}
 		}
+		stored := false
 		for vout, out := range tx.TxOut {
 			if _, ok := x.isWatched(out.PkScript); !ok {
 				continue
+			}
+			if !stored {
+				var buf bytes.Buffer
+				if err := tx.Serialize(&buf); err != nil {
+					return err
+				}
+				put(key(keyRaw, txid[:]), buf.Bytes())
+				stored = true
 			}
 			op := wire.OutPoint{Hash: txid, Index: uint32(vout)}
 			put(key(keyUTXO, scriptKey(out.PkScript), outPointBytes(op)), append(u64(out.Value), u64(height)...))
@@ -432,48 +447,50 @@ func (x *btcIndex) touchesWatched(tx *wire.MsgTx) bool {
 	return false
 }
 
-// importTx adds a confirmed payment to a watched address made before it was
-// registered. This node must have it in a block, and the output unspent.
+// importTx adds a payment to a watched address made before it was
+// registered: each output of txid that pays the address and is unspent in a
+// block, as this node's UTXO set has it (it needs no -txindex). Outputs are
+// looked for among the first maxImportOutputs.
 func (x *btcIndex) importTx(script []byte, txid chainhash.Hash) (int, error) {
 	if _, ok := x.isWatched(script); !ok {
 		return 0, errors.New("address is not registered")
 	}
-	tx, err := x.src.rawTx(txid)
-	if err != nil {
-		return 0, fmt.Errorf("this node does not have transaction %v", txid)
-	}
-	height, unix, err := x.src.txBlock(txid)
-	if err != nil {
-		return 0, err
-	}
-	if height <= 0 {
-		return 0, errors.New("the transaction is not in a block yet; it will appear on its own once it is")
-	}
+	tip, _ := x.tip()
 	batch := new(leveldb.Batch)
 	var added int
-	var net int64
-	for vout, out := range tx.TxOut {
-		if !bytes.Equal(out.PkScript, script) {
-			continue
-		}
-		op := wire.OutPoint{Hash: txid, Index: uint32(vout)}
-		unspent, err := x.src.unspentOutput(op)
+	var net, height int64
+	for vout := uint32(0); vout < maxImportOutputs; vout++ {
+		op := wire.OutPoint{Hash: txid, Index: vout}
+		value, outScript, confs, found, err := x.src.txOut(op)
 		if err != nil {
 			return 0, err
 		}
-		if !unspent {
+		if !found || !bytes.Equal(outScript, script) {
 			continue
 		}
-		batch.Put(key(keyUTXO, scriptKey(script), outPointBytes(op)), append(u64(out.Value), u64(height)...))
+		if confs < 1 {
+			return 0, errors.New("the transaction is not in a block yet; it will appear on its own once it is")
+		}
+		height = tip - confs + 1
+		batch.Put(key(keyUTXO, scriptKey(script), outPointBytes(op)), append(u64(value), u64(height)...))
 		batch.Put(key(keyOwner, outPointBytes(op)), script)
-		net += out.Value
+		net += value
 		added++
 	}
 	if added == 0 {
 		return 0, errors.New("no unspent output of that transaction pays this address")
 	}
-	batch.Put(key(keyHistory, scriptKey(script), u64(height), txid[:]), append(u64(net), u64(unix)...))
+	batch.Put(key(keyHistory, scriptKey(script), u64(height), txid[:]), append(u64(net), u64(0)...))
 	return added, x.db.Write(batch, nil)
+}
+
+// maxImportOutputs bounds the outputs importTx looks at.
+const maxImportOutputs = 64
+
+// storedTx returns the raw transaction txid if the index kept it.
+func (x *btcIndex) storedTx(txid chainhash.Hash) ([]byte, bool) {
+	raw, err := x.db.Get(key(keyRaw, txid[:]), nil)
+	return raw, err == nil
 }
 
 type indexedUTXO struct {
@@ -587,36 +604,6 @@ func (c *btcChain) rawTx(txid chainhash.Hash) (*wire.MsgTx, error) {
 	return decodeTx(s)
 }
 
-func (c *btcChain) txBlock(txid chainhash.Hash) (int64, int64, error) {
-	var t struct {
-		Confirmations int64 `json:"confirmations"`
-		BlockTime     int64 `json:"blocktime"`
-	}
-	if err := c.rpc.call(&t, "getrawtransaction", txid.String(), 1); err != nil {
-		return 0, 0, err
-	}
-	if t.Confirmations == 0 {
-		return 0, 0, nil
-	}
-	tip, err := c.blockCount()
-	if err != nil {
-		return 0, 0, err
-	}
-	return tip - t.Confirmations + 1, t.BlockTime, nil
-}
-
-func (c *btcChain) unspentOutput(op wire.OutPoint) (bool, error) {
-	var out *struct {
-		Value float64 `json:"value"`
-	}
-	// include_mempool: an output spent by an unconfirmed transaction counts
-	// as spent.
-	if err := c.rpc.call(&out, "gettxout", op.Hash.String(), op.Index, true); err != nil {
-		return false, err
-	}
-	return out != nil, nil
-}
-
 func (c *btcChain) mempool() ([]chainhash.Hash, error) {
 	var ids []string
 	if err := c.rpc.call(&ids, "getrawmempool", false); err != nil {
@@ -631,4 +618,22 @@ func (c *btcChain) mempool() ([]chainhash.Hash, error) {
 		out = append(out, *h)
 	}
 	return out, nil
+}
+
+func (c *btcChain) txOut(op wire.OutPoint) (int64, []byte, int64, bool, error) {
+	var out *struct {
+		Confirmations int64   `json:"confirmations"`
+		Value         float64 `json:"value"`
+		ScriptPubKey  struct {
+			Hex string `json:"hex"`
+		} `json:"scriptPubKey"`
+	}
+	if err := c.rpc.call(&out, "gettxout", op.Hash.String(), op.Index, false); err != nil || out == nil {
+		return 0, nil, 0, false, err
+	}
+	script, err := hex.DecodeString(out.ScriptPubKey.Hex)
+	if err != nil {
+		return 0, nil, 0, false, err
+	}
+	return int64(math.Round(out.Value * satPerBTC)), script, out.Confirmations, true, nil
 }

@@ -113,29 +113,28 @@ func (f *fakeBTC) rawTx(txid chainhash.Hash) (*wire.MsgTx, error) {
 	}
 	return nil, errors.New("no such transaction")
 }
-func (f *fakeBTC) txBlock(txid chainhash.Hash) (int64, int64, error) {
+// txOut is an output unspent in a block (the fake's UTXO set: mempool
+// spends don't count, as gettxout with include_mempool false).
+func (f *fakeBTC) txOut(op wire.OutPoint) (int64, []byte, int64, bool, error) {
 	for h, b := range f.blocks {
 		for _, tx := range b {
-			if tx.TxHash() == txid {
-				return int64(h), int64(1_700_000_000 + h*60), nil
+			if tx.TxHash() != op.Hash || int(op.Index) >= len(tx.TxOut) {
+				continue
 			}
+			for _, later := range f.blocks[h:] {
+				for _, spender := range later {
+					for _, in := range spender.TxIn {
+						if in.PreviousOutPoint == op {
+							return 0, nil, 0, false, nil
+						}
+					}
+				}
+			}
+			out := tx.TxOut[op.Index]
+			return out.Value, out.PkScript, int64(len(f.blocks) - h), true, nil
 		}
 	}
-	return 0, 0, nil
-}
-func (f *fakeBTC) unspentOutput(op wire.OutPoint) (bool, error) {
-	all := append([]*wire.MsgTx{}, f.pool...)
-	for _, b := range f.blocks {
-		all = append(all, b...)
-	}
-	for _, tx := range all {
-		for _, in := range tx.TxIn {
-			if in.PreviousOutPoint == op {
-				return false, nil
-			}
-		}
-	}
-	return true, nil
+	return 0, nil, 0, false, nil
 }
 func (f *fakeBTC) mempool() ([]chainhash.Hash, error) {
 	var ids []chainhash.Hash

@@ -146,9 +146,18 @@ func (srv *server) btcRawTx(r *http.Request) (any, error) {
 	if err != nil {
 		return nil, badRequest("invalid txid")
 	}
+	// The index keeps every transaction paying a registered address; the
+	// node has the mempool's, and recent blocks'. A pruned node has dropped
+	// older ones: wallets then fetch the bytes elsewhere, and check them
+	// against the txid themselves.
+	if srv.btcIdx != nil {
+		if raw, ok := srv.btcIdx.storedTx(*txid); ok {
+			return map[string]string{"hex": hex.EncodeToString(raw)}, nil
+		}
+	}
 	var hexTx string
 	if err := srv.btc.rpc.call(&hexTx, "getrawtransaction", txid.String(), 0); err != nil {
-		return nil, &apiError{http.StatusNotFound, "no such transaction on Bitcoin"}
+		return nil, &apiError{http.StatusNotFound, "this node no longer has that transaction"}
 	}
 	return map[string]string{"hex": hexTx}, nil
 }

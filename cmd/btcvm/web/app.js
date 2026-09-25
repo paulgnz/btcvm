@@ -741,7 +741,7 @@ const networks = {
   },
   btc: {
     utxos: () => btcUtxos,
-    getRawTx: async (txid) => (await api(`/api/btc/rawtx/${txid}`)).hex,
+    getRawTx: btcRawTx,
     broadcast: '/api/btc/tx',
     refresh: () => refreshBTCWallet(),
   },
@@ -832,6 +832,27 @@ function showFailure(el, err) {
   if (!err.cancelled) return showResult(el, err.message, false);
   el.textContent = err.message;
   el.className = 'result';
+}
+
+// btcRawTx fetches a Bitcoin transaction's bytes, to check a coin it
+// spends. The bridge's node is pruned, so it may no longer have an old one:
+// then public explorers are asked. chain.js accepts only bytes that hash to
+// the txid, so it doesn't matter who supplies them.
+async function btcRawTx(txid) {
+  try {
+    return (await api(`/api/btc/rawtx/${txid}`)).hex;
+  } catch (err) {
+    if (err.status !== 404) throw err;
+  }
+  if (info.bitcoinNetwork === 'mainnet') {
+    for (const base of ['https://mempool.space/api/tx/', 'https://blockstream.info/api/tx/']) {
+      try {
+        const res = await fetch(`${base}${txid}/hex`);
+        if (res.ok) return (await res.text()).trim();
+      } catch { /* try the next */ }
+    }
+  }
+  throw new Error(`couldn't find Bitcoin transaction ${txid} to check the coin it spends`);
 }
 
 // pay plans a payment on a network ('vm' or 'btc'), shows it for review,

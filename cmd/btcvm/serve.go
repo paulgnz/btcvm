@@ -446,7 +446,10 @@ func formatSigned(satoshis int64) string {
 // securityHeaders sets the headers a wallet page should have: scripts and
 // connections only from this origin, no framing, no content sniffing.
 func securityHeaders(next http.Handler) http.Handler {
-	const csp = "default-src 'self'; script-src 'self'; connect-src 'self'; " +
+	// connect-src: the wallet fetches old Bitcoin transactions from public
+	// explorers when the bridge's pruned node no longer has them, and
+	// checks them against their txid.
+	const csp = "default-src 'self'; script-src 'self'; connect-src 'self' https://mempool.space https://blockstream.info; " +
 		"style-src 'self' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; " +
 		"img-src 'self' data:; object-src 'none'; base-uri 'none'; form-action 'self'; frame-ancestors 'none'"
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -600,7 +603,7 @@ func (srv *server) pegOut(r *http.Request) (any, error) {
 			var tx struct {
 				Confirmations int64 `json:"confirmations"`
 			}
-			if err := srv.btc.rpc.call(&tx, "getrawtransaction", payment.String(), true); err == nil {
+			if err := srv.btc.rpc.callNamed(&tx, "gettransaction", map[string]any{"txid": payment.String()}); err == nil {
 				out["paymentConfirmations"] = tx.Confirmations
 			}
 		}

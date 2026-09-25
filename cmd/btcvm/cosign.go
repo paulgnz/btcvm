@@ -90,6 +90,10 @@ type proposal struct {
 
 	// FeeRate is the sat/vB a Bitcoin payout or refund pays.
 	FeeRate int64
+	// Blocks names the block holding each Bitcoin transaction the proposal
+	// involves (by txid), so a signer that missed one can import it from a
+	// pruned node. Its node checks the hint; a wrong one just fails.
+	Blocks map[string]string
 
 	tx   *wire.MsgTx
 	prev []spent // the output each input spends
@@ -101,6 +105,8 @@ type signRequest struct {
 	Tx       string   `json:"tx"` // unsigned
 	Register []string `json:"register,omitempty"`
 	FeeRate  int64    `json:"feeRate,omitempty"` // sat/vB, for Bitcoin transactions
+	// Blocks: txid -> block hash hints for the Bitcoin transactions involved.
+	Blocks map[string]string `json:"blocks,omitempty"`
 }
 
 type signResponse struct {
@@ -125,6 +131,7 @@ func parseDest(s string) (destination, error) {
 // authorize signs p.tx with Required signatures: from keys this process
 // holds, if any, then from remote signers.
 func (b *bridge) authorize(p *proposal) error {
+	p.Blocks = b.blockHints(p)
 	sigs := map[int][][]byte{}
 	for i, pub := range b.signers.pubKeys {
 		for _, key := range b.signers.privKeys {
@@ -159,6 +166,32 @@ func (b *bridge) authorize(p *proposal) error {
 		return fmt.Errorf("%d of %d signatures: %s", len(sigs), b.signers.Required, strings.Join(failures, "; "))
 	}
 	return b.signers.assemble(p.tx, p.prev, sigs)
+}
+
+// blockHints names the block of each Bitcoin transaction p involves: the
+// deposit a release credits, and the transactions a payout's inputs come
+// from. Only what the coordinator's wallet knows to be in a block is named.
+func (b *bridge) blockHints(p *proposal) map[string]string {
+	c, ok := b.btc.(*btcChain)
+	if !ok {
+		return nil
+	}
+	var txids []string
+	if op, err := parseOutPoint(p.Action.Deposit); err == nil {
+		txids = append(txids, op.Hash.String())
+	}
+	if p.Chain == chainBitcoin {
+		for _, in := range p.tx.TxIn {
+			txids = append(txids, in.PreviousOutPoint.Hash.String())
+		}
+	}
+	hints := map[string]string{}
+	for _, id := range txids {
+		if h, err := c.blockOf(id); err == nil && h != "" {
+			hints[id] = h
+		}
+	}
+	return hints
 }
 
 // remoteSigner is a "btcvm signer" the coordinator asks for signatures.
@@ -254,7 +287,7 @@ func (r *remoteSigner) do(method, path string, body []byte, result any) error {
 // sign asks the signer to sign p, returning its position in set and its
 // signature for each input.
 func (r *remoteSigner) sign(p *proposal, set *signerSet) (int, [][]byte, error) {
-	req := signRequest{Chain: p.Chain, Action: p.Action, Tx: encodeTx(p.tx), FeeRate: p.FeeRate}
+	req := signRequest{Chain: p.Chain, Action: p.Action, Tx: encodeTx(p.tx), FeeRate: p.FeeRate, Blocks: p.Blocks}
 	for _, d := range p.Register {
 		req.Register = append(req.Register, encodeDest(d))
 	}
@@ -711,7 +744,7 @@ func (c *cosigner) catchUp(s *pegState, req signRequest, tx *wire.MsgTx) (*pegSt
 		return s, nil
 	}
 	for _, txid := range missing {
-		if err := dc.importTx(txid); err != nil {
+		if err := dc.importTx(txid, req.Blocks[txid.String()]); err != nil {
 			c.b.logf("could not import %v from this signer's Bitcoin node: %v", txid, err)
 		}
 	}

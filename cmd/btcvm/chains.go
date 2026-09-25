@@ -8,7 +8,6 @@ import (
 	"math"
 	"strings"
 	"sync"
-	"sync/atomic"
 	"time"
 
 	"github.com/MetalBlockchain/btcvm/btcd/btcutil"
@@ -171,10 +170,9 @@ func sendRaw(rpc *rpcClient, tx *wire.MsgTx) (chainhash.Hash, error) {
 
 // btcChain reads Bitcoin through Bitcoin Core's JSON-RPC, using a
 // watch-only descriptor wallet (ensureWallet) that holds the addresses the
-// bridge watches. The node needs -txindex.
+// bridge watches. The node can be pruned and needs no -txindex.
 type btcChain struct {
-	rpc     *rpcClient // the wallet's endpoint, .../wallet/NAME
-	indexed atomic.Bool
+	rpc *rpcClient // the wallet's endpoint, .../wallet/NAME
 
 	mu    sync.Mutex
 	known map[string]*knownTx // wallet transactions read so far, by txid
@@ -234,17 +232,30 @@ const (
 // importTx adds one transaction, already in a block, to the wallet without a
 // rescan: this node proves it is in the chain (gettxoutproof) and the wallet
 // takes it (importprunedfunds). It lets a signer that started watching an
-// address late see a payment made to it before then.
-func (c *btcChain) importTx(txid chainhash.Hash) error {
+// address late see a payment made to it before then. A pruned node without
+// -txindex finds the transaction only in the block named by blockHash, a
+// hint from the coordinator that this node checks; it must still hold that
+// block.
+func (c *btcChain) importTx(txid chainhash.Hash, blockHash string) error {
+	args := []any{txid.String(), 0}
+	proofArgs := []any{[]string{txid.String()}}
+	if blockHash != "" {
+		args = append(args, blockHash)
+		proofArgs = append(proofArgs, blockHash)
+	}
 	var raw string
-	if err := c.rpc.call(&raw, "getrawtransaction", txid.String(), 0); err != nil {
+	if err := c.rpc.call(&raw, "getrawtransaction", args...); err != nil {
 		return err
 	}
 	var proof string
-	if err := c.rpc.call(&proof, "gettxoutproof", []string{txid.String()}); err != nil {
+	if err := c.rpc.call(&proof, "gettxoutproof", proofArgs...); err != nil {
 		return err
 	}
-	return c.rpc.call(nil, "importprunedfunds", raw, proof)
+	if err := c.rpc.call(nil, "importprunedfunds", raw, proof); err != nil {
+		return err
+	}
+	c.forget()
+	return nil
 }
 
 // watch adds address to the wallet as a watch-only descriptor. With rescan
@@ -269,6 +280,7 @@ func (c *btcChain) watch(address btcutil.Address, rescan bool) error {
 	if err := c.rpc.call(&results, "importdescriptors", req); err != nil {
 		return err
 	}
+	c.forget()
 	if len(results) != 1 || !results[0].Success {
 		if len(results) == 1 && results[0].Error != nil {
 			return fmt.Errorf("importdescriptors %s: %w", address.EncodeAddress(), results[0].Error)
@@ -294,29 +306,31 @@ func (c *btcChain) estimateFeeRate() (int64, error) {
 	return int64(math.Ceil(est.FeeRate * satPerBTC / 1000)), nil
 }
 
-// prevOut returns the output op names, and whether it is in a block and
-// unspent there (it may be spent by a transaction in the mempool).
+// prevOut returns the output op names if it is in a block and unspent
+// there (it may be spent by a transaction in the mempool), from the UTXO
+// set, which needs no -txindex. Otherwise it returns nil and false.
 func (c *btcChain) prevOut(op wire.OutPoint) (*wire.TxOut, bool, error) {
-	tx, err := c.rawTx(op.Hash)
-	if err != nil {
-		return nil, false, err
-	}
-	if int(op.Index) >= len(tx.TxOut) {
-		return nil, false, fmt.Errorf("%v has no output %d", op.Hash, op.Index)
-	}
 	var out *struct {
-		Confirmations int64 `json:"confirmations"`
+		Confirmations int64   `json:"confirmations"`
+		Value         float64 `json:"value"`
+		ScriptPubKey  struct {
+			Hex string `json:"hex"`
+		} `json:"scriptPubKey"`
 	}
 	if err := c.rpc.call(&out, "gettxout", op.Hash.String(), op.Index, false); err != nil {
 		return nil, false, err
 	}
-	return tx.TxOut[op.Index], out != nil && out.Confirmations > 0, nil
+	if out == nil || out.Confirmations < 1 {
+		return nil, false, nil
+	}
+	script, err := hex.DecodeString(out.ScriptPubKey.Hex)
+	if err != nil {
+		return nil, false, err
+	}
+	return wire.NewTxOut(int64(math.Round(out.Value*satPerBTC)), script), true, nil
 }
 
 func (c *btcChain) txsFor(addresses []btcutil.Address) ([]chainTx, error) {
-	if err := c.requireTxIndex(); err != nil {
-		return nil, err
-	}
 	scripts := scriptSet(addresses)
 	var entries []struct {
 		TxID             string   `json:"txid"`
@@ -351,6 +365,46 @@ func (c *btcChain) txsFor(addresses []btcutil.Address) ([]chainTx, error) {
 		}
 	}
 	return txs, nil
+}
+
+// errNotWalletTx is Bitcoin Core's code for a transaction the wallet
+// doesn't have.
+const errNotWalletTx = -5
+
+// walletRaw reads a transaction from the wallet; ours is false if the wallet
+// doesn't have it, which needs no -txindex to know.
+func (c *btcChain) walletRaw(txid string) (tx *wire.MsgTx, ours bool, err error) {
+	var t struct {
+		Hex string `json:"hex"`
+	}
+	err = c.rpc.callNamed(&t, "gettransaction", map[string]any{"txid": txid})
+	if isRPCCode(err, errNotWalletTx) {
+		return nil, false, nil
+	}
+	if err != nil {
+		return nil, false, err
+	}
+	tx, err = decodeTx(t.Hex)
+	return tx, err == nil, err
+}
+
+// blockOf is the hash of the block holding wallet transaction txid, or ""
+// if it is unconfirmed.
+func (c *btcChain) blockOf(txid string) (string, error) {
+	var t struct {
+		BlockHash string `json:"blockhash"`
+	}
+	err := c.rpc.callNamed(&t, "gettransaction", map[string]any{"txid": txid})
+	return t.BlockHash, err
+}
+
+// forget empties the cache of wallet transactions, after the wallet learns
+// of transactions it didn't have: an input once found not to spend a
+// watched output may now be found to.
+func (c *btcChain) forget() {
+	c.mu.Lock()
+	c.known = nil
+	c.mu.Unlock()
 }
 
 // knownTx is a wallet transaction and the output script each of its inputs
@@ -388,24 +442,26 @@ func (c *btcChain) walletTx(txid string) (*knownTx, error) {
 	if ok {
 		return known, nil
 	}
-	var t struct {
-		Hex string `json:"hex"`
-	}
-	if err := c.rpc.callNamed(&t, "gettransaction", map[string]any{"txid": txid}); err != nil {
-		return nil, err
-	}
-	tx, err := decodeTx(t.Hex)
+	tx, ours, err := c.walletRaw(txid)
 	if err != nil {
 		return nil, err
+	}
+	if !ours {
+		return nil, fmt.Errorf("%s is not a wallet transaction", txid)
 	}
 	known = &knownTx{tx: tx, prevScripts: make([][]byte, len(tx.TxIn))}
 	for i, in := range tx.TxIn {
 		if in.PreviousOutPoint.Hash == (chainhash.Hash{}) {
 			continue // a coinbase
 		}
-		prevTx, err := c.rawTx(in.PreviousOutPoint.Hash)
+		// An output paying a watched address is always in a wallet
+		// transaction; one that isn't can't be a peg output.
+		prevTx, ours, err := c.walletRaw(in.PreviousOutPoint.Hash.String())
 		if err != nil {
 			return nil, fmt.Errorf("reading %v, which wallet transaction %v spends: %w", in.PreviousOutPoint.Hash, txid, err)
+		}
+		if !ours {
+			continue
 		}
 		if int(in.PreviousOutPoint.Index) >= len(prevTx.TxOut) {
 			return nil, fmt.Errorf("wallet transaction %v spends a missing output %v", txid, in.PreviousOutPoint)
@@ -419,30 +475,6 @@ func (c *btcChain) walletTx(txid string) (*knownTx, error) {
 	c.known[txid] = known
 	c.mu.Unlock()
 	return known, nil
-}
-
-// requireTxIndex fails unless Bitcoin Core runs with a synced -txindex,
-// which reading the peg's spends depends on. Once it has passed it is not
-// asked again.
-func (c *btcChain) requireTxIndex() error {
-	if c.indexed.Load() {
-		return nil
-	}
-	var info map[string]struct {
-		Synced bool `json:"synced"`
-	}
-	if err := c.rpc.call(&info, "getindexinfo"); err != nil {
-		return err
-	}
-	idx, ok := info["txindex"]
-	switch {
-	case !ok:
-		return errors.New("Bitcoin Core must run with -txindex")
-	case !idx.Synced:
-		return errors.New("Bitcoin Core is still building its transaction index (-txindex)")
-	}
-	c.indexed.Store(true)
-	return nil
 }
 
 func (c *btcChain) unspent(addresses []btcutil.Address, minConf int64) ([]utxo, error) {
@@ -483,24 +515,18 @@ func (c *btcChain) unspent(addresses []btcutil.Address, minConf int64) ([]utxo, 
 }
 
 // sender returns the destination that funded the first input of txid, which
-// is where a refund of it should normally go.
+// is where a refund of it should normally go. It needs the funding
+// transaction, which a pruned node without -txindex usually no longer has:
+// then the refund needs an address given explicitly.
 func (c *btcChain) sender(txid chainhash.Hash) (destination, error) {
-	var txHex string
-	if err := c.rpc.call(&txHex, "getrawtransaction", txid.String(), 0); err != nil {
-		return destination{}, err
-	}
-	tx, err := decodeTx(txHex)
+	deposit, err := c.walletTx(txid.String())
 	if err != nil {
 		return destination{}, err
 	}
-	prev := tx.TxIn[0].PreviousOutPoint
-	var prevHex string
-	if err := c.rpc.call(&prevHex, "getrawtransaction", prev.Hash.String(), 0); err != nil {
-		return destination{}, err
-	}
-	prevTx, err := decodeTx(prevHex)
+	prev := deposit.tx.TxIn[0].PreviousOutPoint
+	prevTx, err := c.rawTx(prev.Hash)
 	if err != nil {
-		return destination{}, err
+		return destination{}, fmt.Errorf("this node can't find the deposit's sender (%v); give the refund address with -to", err)
 	}
 	if int(prev.Index) >= len(prevTx.TxOut) {
 		return destination{}, errors.New("malformed input")

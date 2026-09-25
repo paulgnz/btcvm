@@ -34,7 +34,7 @@
       <tr><td>Monitoring</td><td>Checks the peg, overdue transfers, both nodes and the validator's fee balance every minute, and sends Telegram alerts.</td><td class="state"><span class="chip live">Built</span></td></tr>
       <tr><td>Separate signers</td><td>A signer service for each key holder, and <code>btcvm signer-setup</code>, the ceremony that brings new signers in. The tests run the ceremony, then a deposit and a withdrawal signed by separate signers. The bridge moves onto them after the first round trip, and independent operators follow.</td><td class="state"><span class="chip wait">Built</span></td></tr>
       <tr><td>macOS wallet</td><td>A native Mac app for both networks: review every payment before it's signed, Touch ID for each signature, the key kept encrypted to the Mac's Secure Enclave, signed automatic updates, and importing keys from a Bitcoin Core <code>wallet.dat</code>. <a href="https://github.com/paulgnz/bitcoin-vm-wallet">Open source</a>.</td><td class="state"><span class="chip plan">Planned</span></td></tr>
-      <tr><td>Bitcoin node</td><td>The bridge's own Bitcoin Core node, with a full transaction index (about 700 GB), which the bridge and the wallet's Bitcoin balances read.</td><td class="state"><span class="chip wait">Next</span></td></tr>
+      <tr><td>Bitcoin node</td><td>The bridge's own Bitcoin Core node, which the bridge and the wallet's Bitcoin balances read. It runs pruned: it checks every block but keeps only recent ones, about 100 GB.</td><td class="state"><span class="chip wait">Next</span></td></tr>
     </tbody>
   </table>
   </div>
@@ -121,7 +121,7 @@
     </tbody>
   </table>
   </div>
-  <p><strong>What an operator runs.</strong> Metal validators already run metalgo, so a signer adds a Bitcoin Core node with a transaction index (about 700 GB of SSD today), BTCVM on their node, and the light signer service. The plan is to package all of it as one install, plus the ceremony.</p>
+  <p><strong>What an operator runs.</strong> Metal validators already run metalgo, so a signer adds a pruned Bitcoin Core node (about 100 GB), BTCVM on their node, and the light signer service. The plan is to package all of it as one install, plus the ceremony.</p>
   <p><strong>Two limits.</strong> A Bitcoin multisig script holds at most 20 keys, so a larger signer set needs threshold signatures, where many signers produce one ordinary signature together. And every change to the signer set moves the locked BTC to a new multisig address, which is what key rotation does.</p>
 
   <h2>Safety built in today</h2>

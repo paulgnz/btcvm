@@ -2,7 +2,7 @@
 
 ## Mainnet
 
-BTCVM runs as an L1 on Metal mainnet, pegged to Bitcoin mainnet, set up with [`deploy/mainnet.sh`](../deploy/mainnet.sh) and [`cmd/btcvm-l1`](../cmd/btcvm-l1). The bridge needs its own Bitcoin Core node with `-txindex` (about 700 GB), fully synced, before it can credit or pay anything. Once it has synced, the first step is a small round trip: see [FIRST-ROUND-TRIP.md](FIRST-ROUND-TRIP.md).
+BTCVM runs as an L1 on Metal mainnet, pegged to Bitcoin mainnet, set up with [`deploy/mainnet.sh`](../deploy/mainnet.sh) and [`cmd/btcvm-l1`](../cmd/btcvm-l1). The bridge needs its own Bitcoin Core node, fully synced, before it can credit or pay anything; it runs pruned (about 100 GB), without `-txindex`. Once it has synced, the first step is a small round trip: see [FIRST-ROUND-TRIP.md](FIRST-ROUND-TRIP.md).
 
 The beta is capped (a largest deposit and a most-circulating total, shown on the site and at `/api/info`), and at first one server holds every peg signer key. Once launched, the web wallet, explorer and JSON-RPC (`/rpc`) are served at **https://metalbtc.com**. Once the L1 is created, anyone can check it on the P-Chain, for example with `platform.getL1Validator`.
 
@@ -20,7 +20,7 @@ This runs everything on your machine for development: a Metal node running BTCVM
   ```
 - **Bitcoin Core**, from [bitcoincore.org](https://bitcoincore.org/en/download/). Check the download against the release's `SHA256SUMS` and its signatures. Run it on regtest with a transaction index, and make a wallet with some mature coins:
   ```bash
-  bitcoind -regtest -daemon -txindex=1 -fallbackfee=0.0001
+  bitcoind -regtest -daemon -prune=550 -fallbackfee=0.0001
   alias bcli='bitcoin-cli -regtest'
   bcli createwallet dev
   bcli -generate 101                            # mature some regtest coins

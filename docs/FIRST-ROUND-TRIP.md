@@ -11,8 +11,8 @@ The paths and service names below follow the mainnet host set up by
 
 ## 0. The node has caught up
 
-Bitcoin Core needs `-txindex`, about 700 GB of disk, and several days to
-sync. The monitor sends "all checks OK" to Telegram when the `bitcoin` check
+Bitcoin Core runs pruned (about 100 GB of disk) and takes about a day to
+sync: it downloads and checks every block, keeping only recent ones. The monitor sends "all checks OK" to Telegram when the `bitcoin` check
 passes. To check by hand:
 
 ```sh

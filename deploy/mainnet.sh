@@ -11,10 +11,8 @@
 #     5 METAL prepays the validator's continuous fee for several months;
 #   - the peg signer set is in $SECRETS/signers.json.
 # Bitcoin Core (bitcoind-main.service) may still be syncing: deposits are
-# credited once it has caught up. Its data directory needs room for the whole
-# chain with -txindex: about 750 GB in late 2026, and growing. Give it a
-# 1.5 TB (or larger) NVMe volume mounted at /var/lib/bitcoin-main before the
-# node starts syncing; the first sync takes a day or more.
+# credited once it has caught up. It runs pruned (deploy/provision.sh):
+# about 100 GB of disk; the first sync takes a day or more.
 #
 # Alerts go to the Slack or Discord webhook URL in $SECRETS/alert-webhook, and
 # to Telegram if $SECRETS/telegram-token and $SECRETS/telegram-chat exist; https://<domain>/api/health serves the same checks for uptime

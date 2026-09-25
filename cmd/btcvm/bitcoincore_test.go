@@ -21,7 +21,8 @@ import (
 
 // regtestNode is a private Bitcoin Core on regtest, for tests only. It
 // enforces mainnet's relay policy (-acceptnonstdtxn=0), so what it accepts
-// mainnet nodes relay too.
+// mainnet nodes relay too, and runs pruned without -txindex, as the
+// bridge's node does.
 type regtestNode struct {
 	t        *testing.T
 	bitcoind string
@@ -49,7 +50,7 @@ func startRegtest(t *testing.T, extra ...string) *regtestNode {
 	_, _ = rand.Read(secret[:])
 	pass := hex.EncodeToString(secret[:])
 	rpcPort := freePort(t)
-	args := append([]string{"-regtest", "-datadir=" + dir, "-txindex", "-acceptnonstdtxn=0",
+	args := append([]string{"-regtest", "-datadir=" + dir, "-prune=550", "-acceptnonstdtxn=0",
 		"-listen=0", fmt.Sprintf("-rpcport=%d", rpcPort), "-rpcuser=test", "-rpcpassword=" + pass,
 		"-fallbackfee=0.0002", "-printtoconsole=0"}, extra...)
 	n := &regtestNode{t: t, bitcoind: bitcoind, args: args}
@@ -276,16 +277,6 @@ func TestSeparateSignersWithBitcoinCore(t *testing.T) {
 	}
 }
 
-// TestBridgeRefusesNodeWithoutTxIndex checks the bridge won't read the peg
-// from a Bitcoin Core without -txindex: it could not see every payout, and
-// signers could then pay one twice.
-func TestBridgeRefusesNodeWithoutTxIndex(t *testing.T) {
-	n := startRegtest(t, "-txindex=0")
-	c := &btcChain{rpc: n.settings.btcRPCClient()}
-	require.NoError(t, c.ensureWallet())
-	_, err := c.txsFor(nil)
-	require.ErrorContains(t, err, "-txindex")
-}
 
 // TestScanFindsOldCoins scans Bitcoin Core's UTXO set for addresses, as a
 // wallet importing a wallet.dat does, and finds a coin paid to one before

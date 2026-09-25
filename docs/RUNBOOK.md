@@ -115,7 +115,8 @@ Rebuild a host from one:
    ```
 
 3. Start Bitcoin Core and the Metal node, and let both sync (Bitcoin Core's
-   full chain with `-txindex` is about 700 GB and takes days). The restored
+   first sync downloads and checks the whole chain, about a day; pruned, it
+   keeps about 100 GB). The restored
    staking files keep the same NodeID, so the validator carries on.
 4. Start the bridge, web wallet and monitor, **paused** until everything
    checks out: `bv pause …`, then start the services, `bv audit`, and resume.

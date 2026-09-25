@@ -57,4 +57,4 @@ The bridge can run as a single process holding all signer keys, which suits deve
 
 Other limits:
 - Releases are sent one at a time, waiting for each to be accepted, because each spends the previous release's reserve change.
-- `btcvm`'s Bitcoin side uses Bitcoin Core's wallet RPC: the bridge creates its own watch-only descriptor wallet (`btcvm` by default) and imports the peg and deposit addresses into it. Bitcoin Core must run with `-txindex=1`.
+- `btcvm`'s Bitcoin side uses Bitcoin Core's wallet RPC: the bridge creates its own watch-only descriptor wallet (`btcvm` by default) and imports the peg and deposit addresses into it. It needs no `-txindex`, and the node can be pruned: a signer that missed a deposit imports it from the block the coordinator names (which its node checks), as long as its node still has that block. A refund of a deposit whose sender the node can no longer look up needs the refund address given with `-to`.

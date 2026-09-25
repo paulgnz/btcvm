@@ -102,8 +102,8 @@ other signers read out. An agent can't confirm a fingerprint for itself.
 ### What each operator runs
 
 - **The key**, which never leaves the machine. Back it up offline.
-- **A Bitcoin Core node** (`-txindex`, about 700 GB; the signer creates its
-  own watch-only descriptor wallet) and **a BTCVM node**. These are what make the signer
+- **A Bitcoin Core node** (pruned is fine, about 100 GB; the signer creates
+  its own watch-only descriptor wallet) and **a BTCVM node**. These are what make the signer
   independent: it checks everything against its own nodes. A signer that
   uses someone else's node trusts that node's operator.
 - **The signer service** from `join`. It serves on port 9700. Requests must
