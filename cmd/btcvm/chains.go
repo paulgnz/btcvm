@@ -305,15 +305,20 @@ func (c *btcChain) txsFor(addresses []btcutil.Address) ([]chainTx, error) {
 		seen[e.TxID] = true
 
 		var t struct {
-			Hex           string `json:"hex"`
-			Confirmations int64  `json:"confirmations"`
-			Time          int64  `json:"time"`
+			Hex              string   `json:"hex"`
+			Confirmations    int64    `json:"confirmations"`
+			Time             int64    `json:"time"`
+			MempoolConflicts []string `json:"mempoolconflicts"`
 		}
 		if err := c.rpc.callNamed(&t, "gettransaction", map[string]any{"txid": e.TxID}); err != nil {
 			return nil, err
 		}
-		if t.Confirmations < 0 {
-			continue // conflicted: replaced by a transaction now in a block
+		// A transaction that conflicts with one in a block (negative
+		// confirmations), or that a transaction in the mempool replaced,
+		// will not confirm. Only the signers can spend peg outputs, so the
+		// replacement is theirs, and it is listed in its place.
+		if t.Confirmations < 0 || (t.Confirmations == 0 && len(t.MempoolConflicts) > 0) {
+			continue
 		}
 		tx, err := decodeTx(t.Hex)
 		if err != nil {
