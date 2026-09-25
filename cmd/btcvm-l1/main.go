@@ -32,6 +32,7 @@ import (
 	"github.com/MetalBlockchain/metalgo/utils/crypto/secp256k1"
 	"github.com/MetalBlockchain/metalgo/utils/formatting/address"
 	"github.com/MetalBlockchain/metalgo/utils/units"
+	"github.com/MetalBlockchain/metalgo/vms/components/avax"
 	"github.com/MetalBlockchain/metalgo/vms/platformvm"
 	"github.com/MetalBlockchain/metalgo/vms/platformvm/txs"
 	"github.com/MetalBlockchain/metalgo/vms/platformvm/warp/message"
@@ -164,15 +165,20 @@ func cmdAddresses(args []string) error {
 	return nil
 }
 
-// cmdImport moves the key's METAL from the C-Chain to the P-Chain: an export
-// on the C-Chain, then an import on the P-Chain. The C-Chain keeps -keep METAL
-// to pay the export fee.
+// cmdImport moves the key's METAL from the C-Chain (or, with -from x, the
+// X-Chain) to the P-Chain: an export there, then an import on the P-Chain.
+// The C-Chain keeps -keep METAL to pay the export fee; the X-Chain export
+// pays its fixed fee out of the amount.
 func cmdImport(args []string) error {
 	fs := flag.NewFlagSet("import", flag.ExitOnError)
 	keyPath := fs.String("key", "", "P-Chain key file")
 	uri := fs.String("uri", "https://api.metalblockchain.org", "API with the C- and P-Chains")
 	keep := fs.Float64("keep", 0.05, "METAL to leave on the C-Chain for the export fee")
+	from := fs.String("from", "c", "chain to move METAL from: c or x")
 	_ = fs.Parse(args)
+	if *from != "c" && *from != "x" {
+		return errors.New("-from must be c or x")
+	}
 	key, err := readKey(*keyPath)
 	if err != nil {
 		return err
@@ -186,6 +192,35 @@ func cmdImport(args []string) error {
 	cWallet, pWallet := wallet.C(), wallet.P()
 	cChainID := cWallet.Builder().Context().BlockchainID
 	owner := secp256k1fx.OutputOwners{Threshold: 1, Addrs: []ids.ShortID{key.Address()}}
+
+	if *from == "x" {
+		xWallet := wallet.X()
+		xCtx := xWallet.Builder().Context()
+		balances, err := xWallet.Builder().GetFTBalance()
+		if err != nil {
+			return err
+		}
+		have := balances[xCtx.AVAXAssetID]
+		if have > xCtx.BaseTxFee {
+			amount := have - xCtx.BaseTxFee
+			tx, err := xWallet.IssueExportTx(constants.PlatformChainID, []*avax.TransferableOutput{{
+				Asset: avax.Asset{ID: xCtx.AVAXAssetID},
+				Out:   &secp256k1fx.TransferOutput{Amt: amount, OutputOwners: owner},
+			}})
+			if err != nil {
+				return fmt.Errorf("exporting from the X-Chain: %w", err)
+			}
+			log.Printf("exported %.4f METAL from the X-Chain in %s", float64(amount)/float64(units.Avax), tx.ID())
+		} else {
+			log.Printf("nothing to export from the X-Chain (%d nMETAL)", have)
+		}
+		tx, err := pWallet.IssueImportTx(xCtx.BlockchainID, &owner)
+		if err != nil {
+			return fmt.Errorf("importing to the P-Chain: %w", err)
+		}
+		log.Printf("imported to the P-Chain in %s", tx.ID())
+		return nil
+	}
 
 	// The C-Chain balance is in wei (18 decimals); atomic amounts are in
 	// nMETAL (9 decimals).
