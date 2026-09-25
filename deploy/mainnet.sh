@@ -111,7 +111,7 @@ ENV
     alerts="-telegram-token-file $SECRETS/telegram-token -telegram-chat $(cat "$SECRETS/telegram-chat")"
   for unit in bridge web monitor; do
     local exec="$BIN/btcvm bridge $policy -interval 30s"
-    [[ $unit == web ]] && exec="$BIN/btcvm serve $policy ${health% -webhook*} -btc-index $STATE/btcindex -listen 127.0.0.1:8081"
+    [[ $unit == web ]] && exec="$BIN/btcvm serve $policy ${health% -webhook*} -btc-index $STATE/btcindex -chain-id $chain -listen 127.0.0.1:8081"
     [[ $unit == monitor ]] && exec="$BIN/btcvm monitor $policy $health $alerts"
     cat >"/etc/systemd/system/btcvm-$unit-main.service" <<UNIT
 [Unit]
