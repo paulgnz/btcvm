@@ -2,9 +2,11 @@ package main
 
 import (
 	"bytes"
+	"fmt"
 	"net/http"
 	"sort"
 	"strconv"
+	"strings"
 
 	"github.com/MetalBlockchain/btcvm/btcd/chaincfg/chainhash"
 	"github.com/MetalBlockchain/btcvm/btcd/txscript"
@@ -61,7 +63,10 @@ func (srv *server) describe(v *txView, tx *wire.MsgTx, spendsReserve bool) {
 		for _, out := range tx.TxOut {
 			if bytes.Equal(out.PkScript, reserve) {
 				v.Kind = "reserve"
-				v.Label = "Peg reserve created by consensus. It is locked to the peg signers and only released against BTC locked on Bitcoin."
+				v.Label = "Peg reserve created by consensus: the most BTC BTCVM can ever hold, locked to the peg signers. It isn't in circulation: BTC is released from it only one for one against BTC locked on Bitcoin."
+				if snap != nil && snap.state != nil {
+					v.Label += fmt.Sprintf(" Released so far: %s BTC.", trimBTC(formatBTC(srv.b.audit(snap.state).Circulating)))
+				}
 			}
 		}
 	default:
@@ -362,4 +367,12 @@ func (srv *server) reservesHandler(*http.Request) (any, error) {
 		"bitcoinOutputs":       outputs,
 		"personalDepositCount": len(s.redeemFor) - 1,
 	}, nil
+}
+
+// trimBTC drops a BTC amount's trailing zeros: "0.50000000" is "0.5".
+func trimBTC(s string) string {
+	if strings.Contains(s, ".") {
+		s = strings.TrimRight(strings.TrimRight(s, "0"), ".")
+	}
+	return s
 }

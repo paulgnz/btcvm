@@ -15,7 +15,8 @@
   <p class="meta">Status as of 25 September 2026 · Source: <a href="https://github.com/MetalBlockchain/btcvm">github.com/MetalBlockchain/btcvm</a> · Site: <a href="https://metalbtc.com">metalbtc.com</a></p>
 
   <div class="headline">
-    <p><strong>Where it stands.</strong> The chain, the bridge and the web wallet are built for Bitcoin: Bitcoin's rules with SegWit and Taproot from the first block, SegWit deposit addresses, payouts at Bitcoin's live fee rate that can be replaced if they're slow, all tested against btcd's script engine. The software for independent signers, and the ceremony that brings them in, are built too. Nothing has crossed the bridge on mainnet yet. Next: host the bridge's Bitcoin node and, once it has synced, make a first small mainnet round trip.</p>
+    <p><strong>Where it stands.</strong> The chain, the bridge and the web wallet are built for Bitcoin: Bitcoin's rules with SegWit and Taproot from the first block, SegWit deposit addresses, payouts at Bitcoin's live fee rate that can be replaced if they're slow, all tested against btcd's script engine. The software for independent signers, and the ceremony that brings them in, are built too. BTCVM launched as an L1 on Metal mainnet on 25 September 2026, and this site is served by it. The bridge's Bitcoin node is running and catching up with Bitcoin. Nothing has crossed the bridge yet: once the node has synced, a first small mainnet round trip.</p>
+    <p class="meta">Chain <code>BYogm85qvZxwX4PitKLDPzNDbAgo61nw2NSXx5VVXyZZ8yGUK</code> · Subnet <code>SWJQGgyAvXY1aBczr7WupCGpLmukvP2YdXZJUvqm1td37EcJm</code> · Validator <code>NodeID-HEPafTRm58szWKMBFfKSY1ALEWSKTNyYf</code> · Peg <code>bc1qlvaxxu9etgcwlt9u5wkn5pu4p28a5p4uxs088nmn6c2se3wn08eqls0cla</code></p>
   </div>
 
   <h2 id="the-first-round-trip">Next: the first round trip</h2>
@@ -33,8 +34,8 @@
       <tr><td>Explorer</td><td>Shows bridge activity with the transaction on each chain, proof of reserves output by output, and BTCVM blocks, transactions and addresses.</td><td class="state"><span class="chip live">Built</span></td></tr>
       <tr><td>Monitoring</td><td>Checks the peg, overdue transfers, both nodes and the validator's fee balance every minute, and sends Telegram alerts.</td><td class="state"><span class="chip live">Built</span></td></tr>
       <tr><td>Separate signers</td><td>A signer service for each key holder, and <code>btcvm signer-setup</code>, the ceremony that brings new signers in. The tests run the ceremony, then a deposit and a withdrawal signed by separate signers. The bridge moves onto them after the first round trip, and independent operators follow.</td><td class="state"><span class="chip wait">Built</span></td></tr>
-      <tr><td>macOS wallet</td><td>A native Mac app for both networks: review every payment before it's signed, Touch ID for each signature, the key kept encrypted to the Mac's Secure Enclave, signed automatic updates, and importing keys from a Bitcoin Core <code>wallet.dat</code>. <a href="https://github.com/paulgnz/bitcoin-vm-wallet">Open source</a>.</td><td class="state"><span class="chip plan">Planned</span></td></tr>
-      <tr><td>Bitcoin node</td><td>The bridge's own Bitcoin Core node, which the bridge and the wallet's Bitcoin balances read. It runs pruned: it checks every block but keeps only recent ones, about 100 GB.</td><td class="state"><span class="chip wait">Next</span></td></tr>
+      <tr><td>macOS wallet</td><td>A native Mac app for both networks: review every payment before it's signed, Touch ID for each signature, the key kept encrypted to the Mac's Secure Enclave, signed automatic updates, and importing keys from a Bitcoin Core <code>wallet.dat</code>, swept into the app's own address. Built and tested against Bitcoin Core; being tried out before its first release.</td><td class="state"><span class="chip wait">Testing</span></td></tr>
+      <tr><td>Bitcoin node</td><td>The bridge's own Bitcoin Core node, which the bridge and the wallet's Bitcoin balances read. It runs pruned: it checks every block but keeps only recent ones, about 100 GB.</td><td class="state"><span class="chip wait">Syncing</span></td></tr>
     </tbody>
   </table>
   </div>
@@ -166,10 +167,11 @@
     <li class="phase now">
       <div class="phase-head"><h3>Prove the round trip</h3><span class="chip wait">Next</span></div>
       <ul>
-        <li><span class="step-tag todo">Next</span>Host the bridge's Bitcoin node, Bitcoin Core with a transaction index, and let it sync.</li>
+        <li><span class="step-tag">Done</span>Launch the L1 on Metal mainnet, and serve this site from it.</li>
+        <li><span class="step-tag todo">Now</span>The bridge's Bitcoin node, pruned Bitcoin Core, catching up with Bitcoin.</li>
         <li><span class="step-tag todo">Next</span>A first small mainnet round trip (<a href="#the-first-round-trip">above</a>): a deposit credited on BTCVM, then a withdrawal paid back to Bitcoin.</li>
         <li>The wallet's one-click move from its Bitcoin balance, reviewed and signed in the browser.</li>
-        <li>HTTPS enforced, daily encrypted off-server backups of bridge state and the deposit registry, and a restore tested against the live keys.</li>
+        <li><span class="step-tag">Done</span>HTTPS, and daily encrypted backups of the keys, bridge state and the deposit registry, with copies off the server. Next: a restore tested against the live keys.</li>
       </ul>
       <p class="gate"><strong>Done when</strong> each direction has transaction IDs on both chains, visible in the explorer, and proof of reserves matches.</p>
     </li>
