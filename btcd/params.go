@@ -17,8 +17,8 @@ import (
 )
 
 // activeNetParams is a pointer to the parameters specific to the
-// currently active DogecoinVM network.
-var activeNetParams = &dogecoinVMTestNetParams
+// currently active BTCVM network.
+var activeNetParams = &btcVMTestNetParams
 
 // params is used to group parameters for various networks such as the main
 // network and test networks.
@@ -28,22 +28,22 @@ type params struct {
 }
 
 const (
-	// Network magics for DogecoinVM. These are deliberately different from
-	// Dogecoin Core's (mainnet c0c0c0c0, testnet fcc1b7dc) so that a
-	// DogecoinVM node can never be mistaken for a Dogecoin PoW peer.
-	dogecoinVMMainNet wire.BitcoinNet = 0xd06ec0c0
-	dogecoinVMTestNet wire.BitcoinNet = 0xd06eb7dc
+	// Network magics for BTCVM. These are deliberately different from
+	// Bitcoin Core's (mainnet f9beb4d9, testnet3 0b110907) so that a BTCVM
+	// node can never be mistaken for a Bitcoin proof-of-work peer.
+	btcVMMainNet wire.BitcoinNet = 0xb7c0e7a1
+	btcVMTestNet wire.BitcoinNet = 0xb7c0e7a2
 )
 
 var (
-	bigOne                = big.NewInt(1)
-	dogecoinVMPowLimit    = new(big.Int).Sub(new(big.Int).Lsh(bigOne, 255), bigOne)
-	dogecoinVMGenesisTime = time.Unix(1790121600, 0) // 2026-09-23T00:00:00Z
+	bigOne           = big.NewInt(1)
+	btcVMPowLimit    = new(big.Int).Sub(new(big.Int).Lsh(bigOne, 255), bigOne)
+	btcVMGenesisTime = time.Unix(1790294400, 0) // 2026-09-25T00:00:00Z
 )
 
-// newGenesisBlock returns a DogecoinVM genesis block. The coinbase pays
-// nothing to a provably unspendable script: there is no premine, and DOGE
-// only enters the DogecoinVM ledger by being locked on Dogecoin mainnet.
+// newGenesisBlock returns a BTCVM genesis block. The coinbase pays nothing
+// to a provably unspendable script: there is no premine, and BTC only enters
+// the BTCVM ledger by being locked on Bitcoin mainnet.
 func newGenesisBlock(message string) *wire.MsgBlock {
 	pkScript, err := txscript.NullDataScript(nil)
 	if err != nil {
@@ -64,7 +64,7 @@ func newGenesisBlock(message string) *wire.MsgBlock {
 		Header: wire.BlockHeader{
 			Version:    1,
 			MerkleRoot: coinbase.TxHash(),
-			Timestamp:  dogecoinVMGenesisTime,
+			Timestamp:  btcVMGenesisTime,
 			Bits:       0x1d00ffff,
 		},
 		Transactions: []*wire.MsgTx{coinbase},
@@ -72,23 +72,38 @@ func newGenesisBlock(message string) *wire.MsgBlock {
 }
 
 var (
-	dogecoinVMMainNetGenesisBlock = newGenesisBlock("DogecoinVM genesis - mainnet")
-	dogecoinVMMainNetGenesisHash  = dogecoinVMMainNetGenesisBlock.BlockHash()
+	btcVMMainNetGenesisBlock = newGenesisBlock("BTCVM genesis - mainnet")
+	btcVMMainNetGenesisHash  = btcVMMainNetGenesisBlock.BlockHash()
 
-	dogecoinVMTestNetGenesisBlock = newGenesisBlock("DogecoinVM genesis - testnet")
-	dogecoinVMTestNetGenesisHash  = dogecoinVMTestNetGenesisBlock.BlockHash()
+	btcVMTestNetGenesisBlock = newGenesisBlock("BTCVM genesis - testnet")
+	btcVMTestNetGenesisHash  = btcVMTestNetGenesisBlock.BlockHash()
 )
 
-// newDogecoinVMParams returns the consensus parameters shared by every
-// DogecoinVM network. Blocks are ordered by Snowman, not proof of work, so the
+// activeFromBlockOne returns a deployment active from block 1, without
+// signalling, as Bitcoin's buried deployments are.
+func activeFromBlockOne(bit uint8) chaincfg.ConsensusDeployment {
+	return chaincfg.ConsensusDeployment{
+		BitNumber: bit,
+		DeploymentStarter: chaincfg.NewMedianTimeDeploymentStarter(
+			time.Time{}, // Always available for vote
+		),
+		DeploymentEnder: chaincfg.NewMedianTimeDeploymentEnder(
+			time.Time{}, // Never expires
+		),
+		AlwaysActiveHeight: 1,
+	}
+}
+
+// newBTCVMParams returns the consensus parameters shared by every BTCVM
+// network. Blocks are ordered by Snowman, not proof of work, so the
 // difficulty fields only need to be self-consistent; the PoW check itself is
 // disabled in blockchain.checkProofOfWork.
-func newDogecoinVMParams() chaincfg.Params {
+func newBTCVMParams() chaincfg.Params {
 	return chaincfg.Params{
 		DNSSeeds: []chaincfg.DNSSeed{}, // NOTE: There must NOT be any seeds.
 
 		// Chain parameters
-		PowLimit:                 dogecoinVMPowLimit,
+		PowLimit:                 btcVMPowLimit,
 		PowLimitBits:             0x1d00ffff,
 		BIP0034Height:            0, // Always active
 		BIP0065Height:            0, // Always active
@@ -102,18 +117,17 @@ func newDogecoinVMParams() chaincfg.Params {
 		MinDiffReductionTime:     time.Minute * 20, // TargetTimePerBlock * 2
 		GenerateSupported:        true,
 
-		// DogecoinVM never mints DOGE through the coinbase. The PoW chain
-		// keeps issuing 10,000 DOGE per block; mirroring that here would
-		// double real issuance and unback the peg.
+		// BTCVM never mints BTC through the coinbase: Bitcoin's own
+		// issuance continues on Bitcoin, and mirroring it here would
+		// unback the peg.
 		NoBlockSubsidy: true,
 
 		// Checkpoints ordered from oldest to newest.
 		Checkpoints: nil,
 
-		// Consensus rule change deployments.
-		//
-		// The miner confirmation window is defined as:
-		//   target proof of work timespan / target proof of work spacing
+		// Consensus rule change deployments. Every rule Bitcoin has
+		// buried is active from block 1, so BTCVM runs today's Bitcoin
+		// rules from the start with no signalling window.
 		RuleChangeActivationThreshold: 75, // 75% of MinerConfirmationWindow
 		MinerConfirmationWindow:       100,
 		Deployments: [chaincfg.DefinedDeployments]chaincfg.ConsensusDeployment{
@@ -137,110 +151,65 @@ func newDogecoinVMParams() chaincfg.Params {
 					time.Time{}, // Never expires
 				),
 			},
-			chaincfg.DeploymentCSV: {
-				BitNumber: 0,
-				DeploymentStarter: chaincfg.NewMedianTimeDeploymentStarter(
-					time.Time{}, // Always available for vote
-				),
-				DeploymentEnder: chaincfg.NewMedianTimeDeploymentEnder(
-					time.Time{}, // Never expires
-				),
-			},
-			// Dogecoin has neither SegWit nor Taproot. A deployment that
-			// has started gets signalled by every block template and
-			// would lock in within a few hundred blocks, so these never
-			// start.
-			chaincfg.DeploymentSegwit:  neverStartedDeployment(1),
-			chaincfg.DeploymentTaproot: neverStartedDeployment(2),
-			chaincfg.DeploymentTestDummyAlwaysActive: {
-				BitNumber: 29,
-				DeploymentStarter: chaincfg.NewMedianTimeDeploymentStarter(
-					time.Time{}, // Always available for vote
-				),
-				DeploymentEnder: chaincfg.NewMedianTimeDeploymentEnder(
-					time.Time{}, // Never expires
-				),
-				AlwaysActiveHeight: 1,
-			},
+			chaincfg.DeploymentCSV:                   activeFromBlockOne(0),
+			chaincfg.DeploymentSegwit:                activeFromBlockOne(1),
+			chaincfg.DeploymentTaproot:               activeFromBlockOne(2),
+			chaincfg.DeploymentTestDummyAlwaysActive: activeFromBlockOne(29),
 		},
 
-		// Mempool parameters. Standardness carries Dogecoin's dust rules
-		// and keeps witness outputs out of the mempool, so it is enforced
-		// on every network.
+		// Mempool parameters. Standardness (Bitcoin Core's dust and
+		// script rules) is enforced on every network.
 		RelayNonStdTxs: false,
 	}
 }
 
-// neverStartedDeployment returns a deployment that never starts, so it can
-// never be signalled, locked in or activated.
-func neverStartedDeployment(bit uint8) chaincfg.ConsensusDeployment {
-	return chaincfg.ConsensusDeployment{
-		BitNumber: bit,
-		DeploymentStarter: chaincfg.NewMedianTimeDeploymentStarter(
-			time.Date(9999, time.December, 31, 0, 0, 0, 0, time.UTC),
-		),
-		DeploymentEnder: chaincfg.NewMedianTimeDeploymentEnder(
-			time.Time{}, // Never expires.
-		),
-	}
-}
+// BTCVMMainNetParams defines the network parameters for BTCVM mainnet.
+// Address and key encodings are identical to Bitcoin mainnet, so a 1..., 3...
+// or bc1... address is the same address on both ledgers.
+var BTCVMMainNetParams = func() chaincfg.Params {
+	p := newBTCVMParams()
+	p.Name = "btcvm"
+	p.Net = btcVMMainNet
+	// BTCVM does not listen for P2P connections; ports sit next to Bitcoin
+	// Core's (8333/8332) without colliding with them.
+	p.DefaultPort = "8336"
+	p.GenesisBlock = btcVMMainNetGenesisBlock
+	p.GenesisHash = &btcVMMainNetGenesisHash
 
-// DogecoinVMMainNetParams defines the network parameters for DogecoinVM
-// mainnet. Address and key encodings are identical to Dogecoin mainnet, so a
-// D... address is the same address on both ledgers.
-var DogecoinVMMainNetParams = func() chaincfg.Params {
-	p := newDogecoinVMParams()
-	p.Name = "dogecoinvm"
-	p.Net = dogecoinVMMainNet
-	// DogecoinVM does not listen for P2P connections; ports sit next to
-	// Dogecoin Core's (22556/22555) without colliding with them.
-	p.DefaultPort = "22566"
-	p.GenesisBlock = dogecoinVMMainNetGenesisBlock
-	p.GenesisHash = &dogecoinVMMainNetGenesisHash
-
-	// Dogecoin has no bech32 addresses. With an empty HRP no string
-	// decodes as a segwit address.
-	p.Bech32HRPSegwit = ""
-
-	// Address encoding magics (Dogecoin Core chainparams.cpp, CMainParams)
-	p.PubKeyHashAddrID = 30 // starts with D
-	p.ScriptHashAddrID = 22 // starts with 9 or A
-	p.PrivateKeyID = 158    // starts with 6 (uncompressed) or Q (compressed)
-	p.WitnessPubKeyHashAddrID = 0x00
-	p.WitnessScriptHashAddrID = 0x00
+	// Address encoding magics (Bitcoin Core chainparams.cpp, CMainParams)
+	p.Bech32HRPSegwit = "bc"
+	p.PubKeyHashAddrID = 0x00 // starts with 1
+	p.ScriptHashAddrID = 0x05 // starts with 3
+	p.PrivateKeyID = 0x80     // starts with 5 (uncompressed) or K/L (compressed)
+	p.WitnessPubKeyHashAddrID = 0x06
+	p.WitnessScriptHashAddrID = 0x0A
 
 	// BIP32 hierarchical deterministic extended key magics
-	p.HDPrivateKeyID = [4]byte{0x02, 0xfa, 0xc3, 0x98} // starts with dgpv
-	p.HDPublicKeyID = [4]byte{0x02, 0xfa, 0xca, 0xfd}  // starts with dgub
+	p.HDPrivateKeyID = [4]byte{0x04, 0x88, 0xad, 0xe4} // starts with xprv
+	p.HDPublicKeyID = [4]byte{0x04, 0x88, 0xb2, 0x1e}  // starts with xpub
 
-	// SLIP-0044 coin type for Dogecoin.
-	p.HDCoinType = 3
+	// SLIP-0044 coin type for Bitcoin.
+	p.HDCoinType = 0
 	return p
 }()
 
-// DogecoinVMTestNetParams defines the network parameters for DogecoinVM
-// testnet, which pegs against Dogecoin testnet and shares its address and key
-// encodings.
-var DogecoinVMTestNetParams = func() chaincfg.Params {
-	p := newDogecoinVMParams()
-	p.Name = "dogecoinvmtestnet"
-	p.Net = dogecoinVMTestNet
-	// DogecoinVM does not listen for P2P connections; ports sit next to
-	// Dogecoin Core's testnet (44556/44555) without colliding with them.
-	p.DefaultPort = "44566"
-	p.GenesisBlock = dogecoinVMTestNetGenesisBlock
-	p.GenesisHash = &dogecoinVMTestNetGenesisHash
+// BTCVMTestNetParams defines the network parameters for BTCVM testnet,
+// which shares Bitcoin testnet's address and key encodings.
+var BTCVMTestNetParams = func() chaincfg.Params {
+	p := newBTCVMParams()
+	p.Name = "btcvmtestnet"
+	p.Net = btcVMTestNet
+	p.DefaultPort = "18336"
+	p.GenesisBlock = btcVMTestNetGenesisBlock
+	p.GenesisHash = &btcVMTestNetGenesisHash
 
-	// Dogecoin has no bech32 addresses. With an empty HRP no string
-	// decodes as a segwit address.
-	p.Bech32HRPSegwit = ""
-
-	// Address encoding magics (Dogecoin Core chainparams.cpp, CTestNetParams)
-	p.PubKeyHashAddrID = 113 // starts with n
-	p.ScriptHashAddrID = 196 // starts with 2
-	p.PrivateKeyID = 241     // starts with 9 (uncompressed) or c (compressed)
-	p.WitnessPubKeyHashAddrID = 0x00
-	p.WitnessScriptHashAddrID = 0x00
+	// Address encoding magics (Bitcoin Core chainparams.cpp, CTestNetParams)
+	p.Bech32HRPSegwit = "tb"
+	p.PubKeyHashAddrID = 0x6f // starts with m or n
+	p.ScriptHashAddrID = 0xc4 // starts with 2
+	p.PrivateKeyID = 0xef     // starts with 9 (uncompressed) or c (compressed)
+	p.WitnessPubKeyHashAddrID = 0x03
+	p.WitnessScriptHashAddrID = 0x28
 
 	// BIP32 hierarchical deterministic extended key magics
 	p.HDPrivateKeyID = [4]byte{0x04, 0x35, 0x83, 0x94} // starts with tprv
@@ -252,9 +221,10 @@ var DogecoinVMTestNetParams = func() chaincfg.Params {
 }()
 
 // PegReserveAmountPerBlock is what each peg reserve coinbase pays into the
-// reserve: 9 billion DOGE, leaving room under the 10 billion DOGE
-// per-transaction limit for the block's fees.
-const PegReserveAmountPerBlock = 9_000_000_000 * 1e8
+// reserve: 20,999,000 BTC, all the bitcoin there will ever be less 1,000,
+// leaving room under the 21 million BTC per-transaction limit for the
+// block's fees.
+const PegReserveAmountPerBlock = 20_999_000 * 1e8
 
 // withPegReserve returns a copy of p whose chain params lock blocks worth of
 // PegReserveAmountPerBlock to address.
@@ -285,26 +255,26 @@ func withPegReserve(p *params, address string, blocks int32) (*params, error) {
 	return &params{Params: &chainParams, rpcPort: p.rpcPort}, nil
 }
 
-var dogecoinVMMainNetParams = params{
-	Params:  &DogecoinVMMainNetParams,
-	rpcPort: "22565",
+var btcVMMainNetParams = params{
+	Params:  &BTCVMMainNetParams,
+	rpcPort: "8335",
 }
 
-var dogecoinVMTestNetParams = params{
-	Params:  &DogecoinVMTestNetParams,
-	rpcPort: "44565",
+var btcVMTestNetParams = params{
+	Params:  &BTCVMTestNetParams,
+	rpcPort: "18335",
 }
 
-// netName returns the name used when referring to a DogecoinVM network, which
+// netName returns the name used when referring to a BTCVM network, which
 // is also the data and log directory name.
 func netName(chainParams *params) string {
 	return chainParams.Name
 }
 
-// Register the DogecoinVM networks so address and extended key lookups (for
-// example dgpv -> dgub in hdkeychain.Neuter) recognise their encodings.
+// Register the BTCVM networks so address and extended key lookups recognise
+// their encodings. They share Bitcoin's, and differ only in network magic.
 func init() {
-	for _, p := range []*chaincfg.Params{&DogecoinVMMainNetParams, &DogecoinVMTestNetParams} {
+	for _, p := range []*chaincfg.Params{&BTCVMMainNetParams, &BTCVMTestNetParams} {
 		if err := chaincfg.Register(p); err != nil {
 			panic(err)
 		}

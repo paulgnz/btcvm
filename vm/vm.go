@@ -35,7 +35,7 @@ var (
 )
 
 const (
-	Name = "dogecoinvm"
+	Name = "btcvm"
 )
 
 // ID is the VM ID nodes use to find this plugin: Name, zero-padded to 32

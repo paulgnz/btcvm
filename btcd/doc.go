@@ -81,8 +81,8 @@ Application Options:
 	                            addresses to use for generated blocks -- At least
 	                            one address is required if the generate option is
 	                            set
-	    --minrelaytxfee=        The minimum transaction fee rate in DOGE/kB every
-	                            relayed transaction must pay (default: 0.001)
+	    --minrelaytxfee=        The minimum transaction fee rate in BTC/kvB every
+	                            relayed transaction must pay (default: 0.00001)
 	    --nobanning             Disable banning of misbehaving peers
 	    --nocfilters            Disable committed filtering (CF) support
 	    --nocheckpoints         Disable built-in checkpoints.  Don't do this

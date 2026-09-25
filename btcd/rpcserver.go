@@ -4254,7 +4254,7 @@ type parsedRPCCmd struct {
 // commands which are not recognized or not implemented will return an error
 // suitable for use in replies.
 // rpcDisabledInVM are methods that would change the chain or the node
-// outside consensus. Inside DogecoinVM, blocks reach btcd only through
+// outside consensus. Inside BTCVM, blocks reach btcd only through
 // Snowman's Accept and btcd's tip must always be the last accepted block, so
 // these are refused for every user.
 var rpcDisabledInVM = map[string]struct{}{
@@ -4271,7 +4271,7 @@ func (s *rpcServer) standardCmdResult(cmd *parsedRPCCmd, closeChan <-chan struct
 	if _, disabled := rpcDisabledInVM[cmd.method]; disabled {
 		return nil, &btcjson.RPCError{
 			Code:    btcjson.ErrRPCMisc,
-			Message: cmd.method + " is disabled: DogecoinVM blocks are added only by consensus",
+			Message: cmd.method + " is disabled: BTCVM blocks are added only by consensus",
 		}
 	}
 	handler, ok := rpcHandlers[cmd.method]

@@ -13,15 +13,15 @@ import (
 	"github.com/MetalBlockchain/btcvm/btcd/wire"
 )
 
-// TestDogecoinVMGenesisHashes pins the genesis blocks. Changing either one
-// starts a new chain, so it must be a deliberate edit to this test.
-func TestDogecoinVMGenesisHashes(t *testing.T) {
+// TestBTCVMGenesisHashes pins the genesis blocks. Changing either one starts a
+// new chain, so it must be a deliberate edit to this test.
+func TestBTCVMGenesisHashes(t *testing.T) {
 	tests := []struct {
 		params *chaincfg.Params
 		want   string
 	}{
-		{&DogecoinVMMainNetParams, "930a12968573c7205b456a54b8f0fe21c9d7598b846aceafc39bb8423e92a468"},
-		{&DogecoinVMTestNetParams, "f769f49347df638a23e6340e8c809ff680d92bbde6c47523c1de215618129859"},
+		{&BTCVMMainNetParams, "e0cc27df465ffbfc06ac4d89fdf1ff6cd365cab7149961b6f749ad1e0f183de5"},
+		{&BTCVMTestNetParams, "65f25687681d8a5eaf49bfb515d149336e1087522fa8ede05c27816ecf969466"},
 	}
 	for _, test := range tests {
 		if got := test.params.GenesisHash.String(); got != test.want {
@@ -38,16 +38,18 @@ func TestDogecoinVMGenesisHashes(t *testing.T) {
 	}
 }
 
-// TestDogecoinVMEncodings checks that addresses, WIF keys and extended keys
-// use Dogecoin's encodings.
-func TestDogecoinVMEncodings(t *testing.T) {
+// TestBTCVMEncodings checks that addresses, WIF keys and extended keys use
+// Bitcoin's encodings, so a key has the same address on BTCVM and Bitcoin.
+func TestBTCVMEncodings(t *testing.T) {
 	tests := []struct {
-		params           *chaincfg.Params
-		p2pkh, p2sh, wif string
-		extPriv, extPub  string
+		params              *chaincfg.Params
+		p2pkh, p2sh, wif    string
+		extPriv, extPub     string
+		p2wpkh, p2wsh, p2tr string
+		bitcoin             *chaincfg.Params // the Bitcoin network it matches
 	}{
-		{&DogecoinVMMainNetParams, "D", "9A", "Q", "dgpv", "dgub"},
-		{&DogecoinVMTestNetParams, "n", "2", "c", "tprv", "tpub"},
+		{&BTCVMMainNetParams, "1", "3", "K|L", "xprv", "xpub", "bc1q", "bc1q", "bc1p", &chaincfg.MainNetParams},
+		{&BTCVMTestNetParams, "m|n", "2", "c", "tprv", "tpub", "tb1q", "tb1q", "tb1p", &chaincfg.TestNet3Params},
 	}
 
 	hash160 := bytes.Repeat([]byte{0x42}, 20)
@@ -89,28 +91,52 @@ func TestDogecoinVMEncodings(t *testing.T) {
 			t.Fatal(err)
 		}
 		checkPrefix(t, name, "extended public key", pub.String(), test.extPub)
+
+		// SegWit and Taproot addresses.
+		wpkh, err := btcutil.NewAddressWitnessPubKeyHash(hash160, test.params)
+		if err != nil {
+			t.Fatal(err)
+		}
+		checkPrefix(t, name, "P2WPKH", wpkh.EncodeAddress(), test.p2wpkh)
+		wsh, err := btcutil.NewAddressWitnessScriptHash(bytes.Repeat([]byte{0x42}, 32), test.params)
+		if err != nil {
+			t.Fatal(err)
+		}
+		checkPrefix(t, name, "P2WSH", wsh.EncodeAddress(), test.p2wsh)
+		tr, err := btcutil.NewAddressTaproot(bytes.Repeat([]byte{0x42}, 32), test.params)
+		if err != nil {
+			t.Fatal(err)
+		}
+		checkPrefix(t, name, "P2TR", tr.EncodeAddress(), test.p2tr)
+
+		// The very same strings on the matching Bitcoin network.
+		for _, a := range []btcutil.Address{pkh, sh, wpkh, wsh, tr} {
+			if _, err := btcutil.DecodeAddress(a.EncodeAddress(), test.bitcoin); err != nil {
+				t.Errorf("%s: %s is not a valid %s address: %v", name, a.EncodeAddress(), test.bitcoin.Name, err)
+			}
+		}
+		btcWIF, _ := btcutil.NewWIF(privKey, test.bitcoin, true)
+		if btcWIF.String() != wif.String() {
+			t.Errorf("%s: WIF %s differs from %s's %s", name, wif, test.bitcoin.Name, btcWIF)
+		}
 	}
 }
 
 func checkPrefix(t *testing.T, network, kind, encoded, allowed string) {
 	t.Helper()
-	// A single-character spec lists alternative first characters; a longer
-	// one is a literal prefix.
-	if len(allowed) > 1 && strings.ToLower(allowed) == allowed {
-		if !strings.HasPrefix(encoded, allowed) {
-			t.Errorf("%s: %s %s does not start with %q", network, kind, encoded, allowed)
+	// allowed lists alternative prefixes separated by "|".
+	for _, p := range strings.Split(allowed, "|") {
+		if strings.HasPrefix(encoded, p) {
+			return
 		}
-		return
 	}
-	if !strings.ContainsRune(allowed, rune(encoded[0])) {
-		t.Errorf("%s: %s %s does not start with one of %q", network, kind, encoded, allowed)
-	}
+	t.Errorf("%s: %s %s does not start with %q", network, kind, encoded, allowed)
 }
 
-// TestDogecoinVMNoBlockSubsidy checks that DogecoinVM never mints DOGE through
-// the coinbase.
-func TestDogecoinVMNoBlockSubsidy(t *testing.T) {
-	for _, params := range []*chaincfg.Params{&DogecoinVMMainNetParams, &DogecoinVMTestNetParams} {
+// TestBTCVMNoBlockSubsidy checks that BTCVM never mints BTC through the
+// coinbase.
+func TestBTCVMNoBlockSubsidy(t *testing.T) {
+	for _, params := range []*chaincfg.Params{&BTCVMMainNetParams, &BTCVMTestNetParams} {
 		for _, height := range []int32{0, 1, 100000, 210000, 1 << 30} {
 			if got := blockchain.CalcBlockSubsidy(height, params); got != 0 {
 				t.Errorf("%s: subsidy at height %d is %d, want 0", params.Name, height, got)
@@ -119,20 +145,19 @@ func TestDogecoinVMNoBlockSubsidy(t *testing.T) {
 	}
 }
 
-// TestDogecoinMaxMoney checks that single outputs are bounded by Dogecoin's
-// MAX_MONEY of 10 billion DOGE rather than Bitcoin's 21 million.
-func TestDogecoinMaxMoney(t *testing.T) {
-	const koinuPerDoge = 1e8
+// TestBitcoinMaxMoney checks that single outputs are bounded by Bitcoin's
+// MAX_MONEY of 21 million BTC.
+func TestBitcoinMaxMoney(t *testing.T) {
+	const satPerBTC = 1e8
 
 	tests := []struct {
 		name  string
 		value int64
 		valid bool
 	}{
-		{"21M DOGE, over Bitcoin's cap", 21e6*koinuPerDoge + 1, true},
-		{"1B DOGE", 1e9 * koinuPerDoge, true},
-		{"exactly MAX_MONEY", 10e9 * koinuPerDoge, true},
-		{"one koinu over MAX_MONEY", 10e9*koinuPerDoge + 1, false},
+		{"1 BTC", satPerBTC, true},
+		{"exactly MAX_MONEY", 21e6 * satPerBTC, true},
+		{"one satoshi over MAX_MONEY", 21e6*satPerBTC + 1, false},
 	}
 	for _, test := range tests {
 		tx := wire.NewMsgTx(1)

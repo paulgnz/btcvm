@@ -75,7 +75,7 @@ func (s *pegSigners) sign(t *testing.T, params *chaincfg.Params, tx *wire.MsgTx,
 
 func setupPegVM(t *testing.T, blocks int32) (*VM, *pegSigners) {
 	t.Helper()
-	signers := newPegSigners(t, &btcd.DogecoinVMTestNetParams)
+	signers := newPegSigners(t, &btcd.BTCVMTestNetParams)
 	vm := setupVMWithConfig(t, map[string]any{
 		"pegReserveAddress": signers.address.EncodeAddress(),
 		"pegReserveBlocks":  blocks,
@@ -134,7 +134,7 @@ func TestPegReserveCannotBeRedirected(t *testing.T) {
 			wantCode: blockchain.ErrBadPegReserve,
 		},
 		{
-			name: "reserve short by one koinu",
+			name: "reserve short by one satoshi",
 			mutate: func(msg *wire.MsgBlock) {
 				msg.Transactions[0].TxOut[idx].Value--
 				msg.Transactions[0].TxOut[0].Value++
@@ -179,8 +179,8 @@ func TestPegReserveRelease(t *testing.T) {
 	userScript, err := txscript.PayToAddrScript(user)
 	require.NoError(err)
 
-	const credit = 1_000 * 1e8 // 1,000 DOGE
-	const fee = 1e6            // 0.01 DOGE
+	const credit = 1_000 * 1e8 // 1,000 BTC
+	const fee = 1e6            // 0.01 BTC
 	tx := wire.NewMsgTx(wire.TxVersion)
 	tx.AddTxIn(wire.NewTxIn(wire.NewOutPoint(coinbase.Hash(), uint32(idx)), nil, nil))
 	tx.AddTxOut(wire.NewTxOut(credit, userScript))
@@ -203,7 +203,7 @@ func TestPegReserveRelease(t *testing.T) {
 
 func TestPegReserveConfigValidation(t *testing.T) {
 	t.Setenv("HOME", t.TempDir())
-	signers := newPegSigners(t, &btcd.DogecoinVMMainNetParams) // wrong network
+	signers := newPegSigners(t, &btcd.BTCVMMainNetParams) // wrong network
 
 	for name, extra := range map[string]map[string]any{
 		"address without blocks":      {"pegReserveAddress": signers.address.EncodeAddress()},

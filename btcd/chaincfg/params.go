@@ -253,7 +253,7 @@ type Params struct {
 
 	// PegReserve, when set, requires the coinbase of each block at heights
 	// 1 through PegReserve.Blocks to pay exactly PegReserve.Amount to
-	// PegReserve.PkScript. It is the only way DogecoinVM creates coins.
+	// PegReserve.PkScript. It is the only way BTCVM creates coins.
 	PegReserve *PegReserve
 
 	// TargetTimespan is the desired amount of time that should elapse

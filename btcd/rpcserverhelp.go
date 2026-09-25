@@ -467,6 +467,38 @@ var helpDescsEnUS = map[string]string{
 	"getnettotalsresult-totalbytessent": "Total bytes sent",
 	"getnettotalsresult-timemillis":     "Number of milliseconds since 1 Jan 1970 GMT",
 
+	// GetNetworkInfoCmd help.
+	"getnetworkinfo--synopsis": "Returns a JSON object containing information about the node's networking.",
+
+	// GetNetworkInfoResult help.
+	"getnetworkinforesult-version":         "The server version",
+	"getnetworkinforesult-subversion":      "The server user agent",
+	"getnetworkinforesult-protocolversion": "The protocol version",
+	"getnetworkinforesult-localservices":   "Services this node offers, as a hex bitmask",
+	"getnetworkinforesult-localrelay":      "Whether transactions are relayed to peers",
+	"getnetworkinforesult-timeoffset":      "The time offset in seconds",
+	"getnetworkinforesult-connections":     "The number of connections",
+	"getnetworkinforesult-connections_in":  "The number of inbound connections",
+	"getnetworkinforesult-connections_out": "The number of outbound connections",
+	"getnetworkinforesult-networkactive":   "Whether networking is enabled",
+	"getnetworkinforesult-networks":        "Information about each network",
+	"getnetworkinforesult-relayfee":        "The minimum relay fee in BTC/kvB",
+	"getnetworkinforesult-incrementalfee":  "The minimum fee increase for replacement, in BTC/kvB",
+	"getnetworkinforesult-localaddresses":  "The addresses this node listens on",
+	"getnetworkinforesult-warnings":        "Any network or blockchain warnings",
+
+	// NetworksResult help.
+	"networksresult-name":                        "The network name",
+	"networksresult-limited":                     "Whether connections are limited to this network",
+	"networksresult-reachable":                   "Whether the network is reachable",
+	"networksresult-proxy":                       "The proxy used for this network, if any",
+	"networksresult-proxy_randomize_credentials": "Whether random proxy credentials are used",
+
+	// LocalAddressesResult help.
+	"localaddressesresult-address": "A local address",
+	"localaddressesresult-port":    "Its port",
+	"localaddressesresult-score":   "Its relative score",
+
 	// GetNodeAddressesResult help.
 	"getnodeaddressesresult-time":     "Timestamp in seconds since epoch (Jan 1 1970 GMT) keeping track of when the node was last seen",
 	"getnodeaddressesresult-services": "The services offered",
@@ -500,6 +532,7 @@ var helpDescsEnUS = map[string]string{
 	"getpeerinforesult-banscore":       "The ban score",
 	"getpeerinforesult-feefilter":      "The requested minimum fee a transaction must have to be announced to the peer",
 	"getpeerinforesult-syncnode":       "Whether or not the peer is the sync peer",
+	"getpeerinforesult-v2_connection":  "Whether the peer uses the v2 (BIP324) transport",
 
 	// GetPeerInfoCmd help.
 	"getpeerinfo--synopsis": "Returns data about each connected network peer as an array of json objects.",
@@ -788,6 +821,7 @@ var rpcResultTypes = map[string][]interface{}{
 	"getmempoolinfo":         {(*btcjson.GetMempoolInfoResult)(nil)},
 	"getmininginfo":          {(*btcjson.GetMiningInfoResult)(nil)},
 	"getnettotals":           {(*btcjson.GetNetTotalsResult)(nil)},
+	"getnetworkinfo":         {(*btcjson.GetNetworkInfoResult)(nil)},
 	"getnetworkhashps":       {(*float64)(nil)},
 	"getnodeaddresses":       {(*[]btcjson.GetNodeAddressesResult)(nil)},
 	"getpeerinfo":            {(*[]btcjson.GetPeerInfoResult)(nil)},

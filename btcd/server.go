@@ -2862,15 +2862,17 @@ func newServer(
 
 	txC := mempool.Config{
 		Policy: mempool.Policy{
-			AcceptNonStd:      cfg.RelayNonStd,
-			DustLimit:         mempool.DefaultDustLimit,
-			HardDustLimit:     mempool.DefaultHardDustLimit,
-			MaxOrphanTxs:      cfg.MaxOrphanTxs,
-			MaxOrphanTxSize:   defaultMaxOrphanTxSize,
-			MaxSigOpCostPerTx: blockchain.MaxBlockSigOpsCost / 4,
-			MinRelayTxFee:     cfg.minRelayTxFee,
-			MaxTxVersion:      2,
-			RejectReplacement: cfg.RejectReplacement,
+			// As Bitcoin Core today: every transaction pays at least the
+			// minimum relay fee; nothing relays free on priority.
+			DisableRelayPriority: true,
+			AcceptNonStd:         cfg.RelayNonStd,
+			FreeTxRelayLimit:     0,
+			MaxOrphanTxs:         cfg.MaxOrphanTxs,
+			MaxOrphanTxSize:      defaultMaxOrphanTxSize,
+			MaxSigOpCostPerTx:    blockchain.MaxBlockSigOpsCost / 4,
+			MinRelayTxFee:        cfg.minRelayTxFee,
+			MaxTxVersion:         2,
+			RejectReplacement:    cfg.RejectReplacement,
 		},
 		ChainParams:    chainParams,
 		FetchUtxoView:  s.chain.FetchUtxoView,

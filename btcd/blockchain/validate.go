@@ -885,8 +885,8 @@ func (b *BlockChain) checkBlockContext(block *btcutil.Block, prevNode *blockNode
 			// committed to by the block hash, so accepting it
 			// would let the same block ID carry arbitrary,
 			// unweighted bytes. Reject it, as Bitcoin Core does
-			// ("unexpected-witness"). DogecoinVM never activates
-			// segwit, so this always applies there.
+			// ("unexpected-witness"). BTCVM activates segwit at
+			// block one, so this applies only to its genesis.
 			for _, tx := range block.Transactions() {
 				if tx.MsgTx().HasWitness() {
 					str := fmt.Sprintf("block contains "+

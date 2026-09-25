@@ -33,7 +33,7 @@ func TestMain(m *testing.M) {
 	os.Exit(m.Run())
 }
 
-// newTestVM starts a VM on DogecoinVM testnet with its btcd data in dir.
+// newTestVM starts a VM on BTCVM testnet with its btcd data in dir.
 // extra is merged into the btcd config in the genesis.
 func newTestVM(t *testing.T, dir string, extra map[string]any) *VM {
 	t.Helper()
@@ -47,7 +47,7 @@ func startTestVM(t *testing.T, dir string, extra map[string]any) (*VM, error) {
 	t.Helper()
 	require := require.New(t)
 
-	miningAddr, err := btcutil.NewAddressPubKeyHash(bytes.Repeat([]byte{0x01}, 20), &btcd.DogecoinVMTestNetParams)
+	miningAddr, err := btcutil.NewAddressPubKeyHash(bytes.Repeat([]byte{0x01}, 20), &btcd.BTCVMTestNetParams)
 	require.NoError(err)
 
 	// btcd copies a sample config next to the binary if none exists.
@@ -259,7 +259,7 @@ func TestVerifyRejectsInvalidBlocks(t *testing.T) {
 			wantErr: errWrongHeight,
 		},
 		{
-			name: "coinbase mints DOGE",
+			name: "coinbase mints BTC",
 			bytes: mutateBlock(t, blk, 1, 0, func(msg *wire.MsgBlock) {
 				msg.Transactions[0].TxOut[0].Value = 1
 			}),
@@ -349,26 +349,22 @@ func acceptBlocks(t *testing.T, vm *VM, n int) {
 	}
 }
 
-// TestSegwitAndTaprootNeverActivate checks that DogecoinVM never activates
-// SegWit or Taproot. Under btcvm's parameters both locked in within a few
-// hundred blocks, because every block template signalled for them.
-func TestSegwitAndTaprootNeverActivate(t *testing.T) {
+// TestSegwitAndTaprootActiveFromBlockOne checks that BTCVM runs Bitcoin's
+// current rules from its first block: SegWit and Taproot need no signalling
+// period, so bc1 addresses work from the start.
+func TestSegwitAndTaprootActiveFromBlockOne(t *testing.T) {
 	require := require.New(t)
 	vm := setupVM(t)
 
-	// Four miner confirmation windows: enough to start, lock in and
-	// activate a deployment that every block signals for.
-	acceptBlocks(t, vm, 4*int(vm.config.ChainParams.MinerConfirmationWindow))
-
-	for _, deployment := range []uint32{chaincfg.DeploymentSegwit, chaincfg.DeploymentTaproot} {
+	for _, deployment := range []uint32{chaincfg.DeploymentCSV, chaincfg.DeploymentSegwit, chaincfg.DeploymentTaproot} {
 		active, err := vm.chain.IsDeploymentActive(deployment)
 		require.NoError(err)
-		require.False(active, "deployment %d is active", deployment)
+		require.True(active, "deployment %d is not active for block one", deployment)
 	}
 }
 
-// TestVerifyRejectsWitnessData checks that a block carrying witness data is
-// invalid while SegWit is inactive.
+// TestVerifyRejectsWitnessData checks that a block carrying witness data
+// without a witness commitment is invalid.
 func TestVerifyRejectsWitnessData(t *testing.T) {
 	require := require.New(t)
 	ctx := context.Background()

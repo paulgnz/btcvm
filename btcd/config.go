@@ -131,7 +131,7 @@ type Config struct {
 	MaxOrphanTxs         int           `json:"maxOrphanTxs"         long:"maxorphantx"          description:"Max number of orphan transactions to keep in memory"`
 	MaxPeers             int           `json:"maxPeers"             long:"maxpeers"             description:"Max number of inbound and outbound peers"`
 	MiningAddrs          []string      `json:"miningAddrs"          long:"miningaddr"           description:"Add the specified payment address to the list of addresses to use for generated blocks -- At least one address is required if the generate option is set"`
-	MinRelayTxFee        float64       `json:"minRelayTxFee"        long:"minrelaytxfee"        description:"The minimum transaction fee rate in DOGE/kB every relayed transaction must pay"`
+	MinRelayTxFee        float64       `json:"minRelayTxFee"        long:"minrelaytxfee"        description:"The minimum transaction fee rate in BTC/kvB every relayed transaction must pay"`
 	DisableBanning       bool          `json:"disableBanning"       long:"nobanning"            description:"Disable banning of misbehaving peers"`
 	NoCFilters           bool          `json:"noCFilters"           long:"nocfilters"           description:"Disable committed filtering (CF) support"`
 	DisableCheckpoints   bool          `json:"disableCheckpoints"   long:"nocheckpoints"        description:"Disable built-in checkpoints.  Don't do this unless you know what you're doing."`
@@ -171,9 +171,9 @@ type Config struct {
 	SigNet               bool          `json:"sigNet"               long:"signet"               description:"Use the signet test network"`
 	SigNetChallenge      string        `json:"sigNetChallenge"      long:"signetchallenge"      description:"Connect to a custom signet network defined by this challenge instead of using the global default signet network -- Can be specified multiple times"`
 	SigNetSeedNode       []string      `json:"sigNetSeedNode"       long:"signetseednode"       description:"Specify a seed node for the signet network instead of using the global default signet network seed nodes"`
-	MainNet              bool          `json:"mainNet"              long:"mainnet"              description:"Use the DogecoinVM main network (default is testnet)"`
+	MainNet              bool          `json:"mainNet"              long:"mainnet"              description:"Use the BTCVM main network (default is testnet)"`
 	PegReserveAddress    string        `json:"pegReserveAddress"    long:"pegreserveaddress"    description:"Address the peg reserve is locked to (normally a P2SH multisig of the peg signers); empty disables the reserve"`
-	PegReserveBlocks     int32         `json:"pegReserveBlocks"     long:"pegreserveblocks"     description:"Number of blocks, from height 1, whose coinbase each pays 9,000,000,000 DOGE into the peg reserve"`
+	PegReserveBlocks     int32         `json:"pegReserveBlocks"     long:"pegreserveblocks"     description:"Number of blocks, from height 1, whose coinbase each pays 20,999,000 BTC into the peg reserve"`
 	TestNet              bool          `json:"testNet"              long:"testnet"              description:"Use the test network"`
 	TorIsolation         bool          `json:"torIsolation"         long:"torisolation"         description:"Enable Tor stream isolation by randomizing user credentials for each connection."`
 	TrickleInterval      time.Duration `json:"trickleInterval"      long:"trickleinterval"      description:"Minimum time between attempts to send new inventory to a connected peer"`
@@ -591,14 +591,14 @@ func LoadConfig(nodeId string, overrideCfg *Config) (*Config, []string, error) {
 	// Count number of network flags passed; assign active network params
 	// while we're at it. Start from the default so a previous LoadConfig
 	// in this process cannot leak its choice.
-	activeNetParams = &dogecoinVMTestNetParams
+	activeNetParams = &btcVMTestNetParams
 	if cfg.MainNet {
 		numNets++
-		activeNetParams = &dogecoinVMMainNetParams
+		activeNetParams = &btcVMMainNetParams
 	}
 	if cfg.TestNet {
 		numNets++
-		activeNetParams = &dogecoinVMTestNetParams
+		activeNetParams = &btcVMTestNetParams
 	}
 	cfg.ChainParams = activeNetParams.Params
 
