@@ -17,8 +17,8 @@ export function confirmationsFor(info, value) {
   return info.depositConfirmations;
 }
 
-// describeTiers says how long deposits wait, for example "1 confirmation
-// for up to 0.001 BTC, 3 for up to 0.01 BTC, and 6 for anything larger".
+// describeTiers says how long deposits wait, for example "2 confirmations
+// for up to 0.001 BTC, 3 for up to 0.005 BTC, and 6 for anything larger".
 export function describeTiers(info) {
   const tiers = info.confirmationTiers || [];
   if (tiers.length === 0) return plural(info.depositConfirmations);

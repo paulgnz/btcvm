@@ -32,7 +32,7 @@ REGISTRY=${REGISTRY-/var/lib/metal-main/secrets/deposits.json}
 RUN_AS=${RUN_AS-btcvm}
 MAX_DAILY=${MAX_DAILY-10000000}
 NETWORK=${NETWORK-mainnet}
-POLICY=${POLICY--confirmations 6 -confirmation-tiers 0.001:1,0.005:3 -max-deposit 1000000 -max-circulating 10000000 -min-fee-rate 1 -max-fee-rate 50}
+POLICY=${POLICY--confirmations 6 -confirmation-tiers 0.001:2,0.005:3 -max-deposit 1000000 -max-circulating 10000000 -min-fee-rate 1 -max-fee-rate 50}
 
 die() { echo "stage-signers: $*" >&2; exit 1; }
 as() { if [ -n "$RUN_AS" ]; then sudo -u "$RUN_AS" "$@"; else "$@"; fi; }

@@ -74,7 +74,7 @@ btcvm signer-setup init            # asks: name, URL, make a key or import one
 btcvm signer-setup coordinator
 btcvm signer-setup assemble -required 2 -coordinator-key PUB \
   -btc-network mainnet -vm-network mainnet \
-  -confirmations 6 -confirmation-tiers "0.001:1,0.01:3" \
+  -confirmations 6 -confirmation-tiers "0.001:2,0.005:3" \
   -max-deposit 1000000 -max-circulating 10000000 \
   alice.json bob.json carol.json
 # → sends signers.json to every operator, and reads the fingerprint out on a call
