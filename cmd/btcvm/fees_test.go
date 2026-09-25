@@ -371,3 +371,51 @@ func TestUnconfirmedDepositIsNotRefunded(t *testing.T) {
 	_, err = h.b.refund(op, h.user(9), false)
 	require.NoError(err)
 }
+
+// TestEveryPayoutPaysThePeg: a payout whose inputs leave no change still
+// pays pegDust back to the peg address, so every signer's wallet lists it.
+func TestEveryPayoutPaysThePeg(t *testing.T) {
+	require := require.New(t)
+	h := newHarness(t)
+	h.b.maxDeposit = 50 * btc
+	alice := h.user(1)
+	held := h.deposit(60*btc, &alice, 6) // over the cap: held
+	h.deposit(10*btc, &alice, 6)
+	require.NotEmpty(h.step())
+	h.vm.mine()
+	_, err := h.b.refund(wire.OutPoint{Hash: held.TxHash()}, h.user(9), false)
+	require.NoError(err)
+	refund := h.lastBTC()
+	require.Equal(int64(pegDust), h.toPeg(refund))
+	require.Equal(60*btc-h.feeOf(refund)-pegDust, paidTo(h.btc, h.user(9)))
+}
+
+// TestPegSpendKnownByWitness: a signer that never saw a deposit still knows
+// a payout spending it as a peg spend, from its witness script, and so
+// knows the peg-out is paid.
+func TestPegSpendKnownByWitness(t *testing.T) {
+	require := require.New(t)
+	h := newHarness(t)
+	alice, aliceOnBTC := h.user(1), h.user(2)
+	_, err := h.b.registry.add(alice)
+	require.NoError(err)
+	h.personalDeposit(100*btc, alice, 6)
+	require.NotEmpty(h.step())
+	h.vm.mine()
+	req := h.pegOut(40*btc, aliceOnBTC)
+	require.NotEmpty(h.step())
+	payout := h.lastBTC()
+	h.btc.mine()
+
+	// A signer that never registered Alice's address: its registry is
+	// empty, so it doesn't know the deposit output the payout spends.
+	late := *h.b
+	late.registry = &depositRegistry{path: t.TempDir() + "/deposits.json"}
+	s, err := late.load()
+	require.NoError(err)
+	require.Equal(payout.TxHash(), s.paid[req.TxHash()], "the payout is known by its witness")
+	require.True(late.signers.spendsPeg(payout))
+	d, ok := late.signers.pegWitness(payout.TxIn[0].Witness[len(payout.TxIn[0].Witness)-1])
+	require.True(ok)
+	require.Equal(alice, *d)
+}

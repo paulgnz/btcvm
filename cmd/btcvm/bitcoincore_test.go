@@ -277,7 +277,6 @@ func TestSeparateSignersWithBitcoinCore(t *testing.T) {
 	}
 }
 
-
 // TestScanFindsOldCoins scans Bitcoin Core's UTXO set for addresses, as a
 // wallet importing a wallet.dat does, and finds a coin paid to one before
 // anything watched it.
@@ -388,4 +387,72 @@ func TestEvictedPayoutKeepsThePegSolvent(t *testing.T) {
 	require.True(a.solvent(), "%+v", a)
 	require.Zero(a.PendingPegOuts)
 	require.Empty(h.step())
+}
+
+// TestLateSignerKnowsPayoutByWitness: a signer that was offline when a
+// deposit address was registered, and never saw the deposit or took part in
+// crediting and paying it, still refuses to pay the peg-out again once the
+// payout is in a block: it knows the payout by its witness script, on a
+// pruned node that can't look the deposit up.
+func TestLateSignerKnowsPayoutByWitness(t *testing.T) {
+	require := require.New(t)
+	n := startRegtest(t)
+	h := newCosignHarness(t)
+	wallet := func(name string) *btcChain {
+		s := n.settings
+		s.btcWallet = name
+		c := &btcChain{rpc: s.btcRPCClient()}
+		require.NoError(c.ensureWallet())
+		return c
+	}
+	setup := func(b *bridge, c *btcChain) {
+		b.btc, b.btcParams = c, &chaincfg.RegressionNetParams
+		b.minFeeRate, b.maxFeeRate = 1, 100
+		b.minDeposit, b.minPegOut = 10_000, 30_000
+	}
+	setup(h.b, wallet("btcvm"))
+	h.b.feeRate = func() (int64, error) { return 3, nil }
+	for i, c := range h.signers {
+		setup(c.b, wallet(fmt.Sprintf("signer%d", i)))
+		require.NoError(watchPeg(c.b, false))
+	}
+	require.NoError(watchPeg(h.b, false))
+
+	// Signer 2 is offline throughout.
+	all := h.b.cosigners
+	h.b.cosigners = all[:2]
+	alice := h.user(1)
+	depositAddr, err := registerDeposit(h.b, alice)
+	require.NoError(err)
+	require.NoError(n.funder.call(nil, "sendtoaddress", depositAddr.EncodeAddress(), 0.25))
+	n.mine(6)
+	require.NotEmpty(h.step())
+	h.vm.mine()
+	req := h.pegOut(btc/10, n.newAddress())
+	require.NotEmpty(h.step())
+	n.mine(1)
+
+	// Signer 2 comes back and is asked to pay the same peg-out again, from
+	// a different peg output (the change of the first payout).
+	late := h.signers[2]
+	s, err := late.b.load()
+	require.NoError(err)
+	payment, paid := s.paid[req.TxHash()]
+	require.True(paid, "the late signer sees the payout")
+	var other []utxo
+	for _, u := range s.lockedUTXOs {
+		if u.confirmations > 0 {
+			other = append(other, u)
+		}
+	}
+	require.NotEmpty(other)
+	prev, _, err := s.pegSpends(other[:1])
+	require.NoError(err)
+	p, _ := findPegOut(s.pegOuts, req.TxHash())
+	tx, err := h.b.buildPayout(other[:1], prev, p.value, p.dest, encodePayment(p.txid), 3)
+	if err == nil {
+		_, _, _, err = late.check(signRequest{Chain: chainBitcoin, FeeRate: 3, Tx: encodeTx(tx),
+			Action: action{Kind: actionPayout, PegOut: req.TxHash().String()}})
+	}
+	require.ErrorContains(err, "already done in "+payment.String())
 }

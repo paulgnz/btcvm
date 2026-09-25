@@ -301,7 +301,7 @@ func TestSignerRefundNeedsApproval(t *testing.T) {
 
 	_, err = h.b.refund(op, back, false)
 	require.NoError(err)
-	require.Equal(100*btc-h.feeOf(h.lastBTC()), paidTo(h.btc, back))
+	require.Equal(100*btc-h.feeOf(h.lastBTC())-h.toPeg(h.lastBTC()), paidTo(h.btc, back))
 }
 
 func TestSignerAuthAndDailyLimit(t *testing.T) {

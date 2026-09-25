@@ -5,6 +5,7 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
+	"log"
 	"math"
 	"strings"
 	"sync"
@@ -254,7 +255,6 @@ func (c *btcChain) importTx(txid chainhash.Hash, blockHash string) error {
 	if err := c.rpc.call(nil, "importprunedfunds", raw, proof); err != nil {
 		return err
 	}
-	c.forget()
 	return nil
 }
 
@@ -273,14 +273,21 @@ func (c *btcChain) watch(address btcutil.Address, rescan bool) error {
 		timestamp = 0
 	}
 	var results []struct {
-		Success bool      `json:"success"`
-		Error   *rpcError `json:"error"`
+		Success  bool      `json:"success"`
+		Error    *rpcError `json:"error"`
+		Warnings []string  `json:"warnings"`
 	}
 	req := []map[string]any{{"desc": info.Descriptor, "timestamp": timestamp, "label": "btcvm"}}
 	if err := c.rpc.call(&results, "importdescriptors", req); err != nil {
 		return err
 	}
-	c.forget()
+	// A pruned node rescans only the blocks it still has, and says so in a
+	// warning: payments older than that are not found.
+	for _, r := range results {
+		for _, w := range r.Warnings {
+			log.Printf("watching %s: %s", address.EncodeAddress(), w)
+		}
+	}
 	if len(results) != 1 || !results[0].Success {
 		if len(results) == 1 && results[0].Error != nil {
 			return fmt.Errorf("importdescriptors %s: %w", address.EncodeAddress(), results[0].Error)
@@ -398,43 +405,32 @@ func (c *btcChain) blockOf(txid string) (string, error) {
 	return t.BlockHash, err
 }
 
-// forget empties the cache of wallet transactions, after the wallet learns
-// of transactions it didn't have: an input once found not to spend a
-// watched output may now be found to.
-func (c *btcChain) forget() {
-	c.mu.Lock()
-	c.known = nil
-	c.mu.Unlock()
-}
-
-// knownTx is a wallet transaction and the output script each of its inputs
-// spends: what never changes about it, so it is read from the node once.
-// Its confirmations and conflicts come fresh from each listing.
+// knownTx is a wallet transaction, read from the node once: its bytes never
+// change. Its confirmations and conflicts come fresh from each listing.
 type knownTx struct {
-	tx          *wire.MsgTx
-	prevScripts [][]byte // nil for a coinbase input
+	tx *wire.MsgTx
 }
 
 // touches reports whether the transaction pays to one of scripts or spends
-// an output paying to one.
+// an output paying to one. A spend is known by its witness script, whose
+// P2WSH hash consensus has checked against the output spent, so it needs no
+// lookup of the transaction that made the output. (Every signer transaction
+// also pays the peg address, so it is found by its outputs too.)
 func (k *knownTx) touches(scripts map[string]bool) bool {
 	for _, out := range k.tx.TxOut {
 		if scripts[string(out.PkScript)] {
 			return true
 		}
 	}
-	for _, prev := range k.prevScripts {
-		if prev != nil && scripts[string(prev)] {
+	for _, in := range k.tx.TxIn {
+		if len(in.Witness) > 0 && scripts[string(p2wshScript(in.Witness[len(in.Witness)-1]))] {
 			return true
 		}
 	}
 	return false
 }
 
-// walletTx reads a wallet transaction and the scripts its inputs spend,
-// from the cache or the node. The wallet lists only transactions that pay
-// or spend a watched address, so an input that can't be read is an error,
-// not a skip: dropping a peg payout would hide that it was paid.
+// walletTx reads a wallet transaction, from the cache or the node.
 func (c *btcChain) walletTx(txid string) (*knownTx, error) {
 	c.mu.Lock()
 	known, ok := c.known[txid]
@@ -449,25 +445,7 @@ func (c *btcChain) walletTx(txid string) (*knownTx, error) {
 	if !ours {
 		return nil, fmt.Errorf("%s is not a wallet transaction", txid)
 	}
-	known = &knownTx{tx: tx, prevScripts: make([][]byte, len(tx.TxIn))}
-	for i, in := range tx.TxIn {
-		if in.PreviousOutPoint.Hash == (chainhash.Hash{}) {
-			continue // a coinbase
-		}
-		// An output paying a watched address is always in a wallet
-		// transaction; one that isn't can't be a peg output.
-		prevTx, ours, err := c.walletRaw(in.PreviousOutPoint.Hash.String())
-		if err != nil {
-			return nil, fmt.Errorf("reading %v, which wallet transaction %v spends: %w", in.PreviousOutPoint.Hash, txid, err)
-		}
-		if !ours {
-			continue
-		}
-		if int(in.PreviousOutPoint.Index) >= len(prevTx.TxOut) {
-			return nil, fmt.Errorf("wallet transaction %v spends a missing output %v", txid, in.PreviousOutPoint)
-		}
-		known.prevScripts[i] = prevTx.TxOut[in.PreviousOutPoint.Index].PkScript
-	}
+	known = &knownTx{tx: tx}
 	c.mu.Lock()
 	if c.known == nil {
 		c.known = map[string]*knownTx{}

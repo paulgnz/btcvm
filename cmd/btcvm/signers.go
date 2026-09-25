@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bytes"
 	"crypto/rand"
 	"crypto/sha256"
 	"encoding/hex"
@@ -245,6 +246,45 @@ func (s *signerSet) sign(tx *wire.MsgTx, prev []spent) error {
 		}
 	}
 	return s.assemble(tx, prev, sigs)
+}
+
+// spendsPeg reports whether tx spends a peg output: the peg address or a
+// personal deposit address. It reads the witness scripts, which consensus
+// has checked against the outputs spent, so it needs no record of those
+// outputs: a signer that never saw a deposit still knows a payout that
+// spends it for what it is.
+func (s *signerSet) spendsPeg(tx *wire.MsgTx) bool {
+	for _, in := range tx.TxIn {
+		if len(in.Witness) == 0 {
+			continue
+		}
+		if _, ok := s.pegWitness(in.Witness[len(in.Witness)-1]); ok {
+			return true
+		}
+	}
+	return false
+}
+
+// pegWitness reports whether script is the peg's witness script, or a
+// personal deposit address's; for a deposit address it also returns the
+// destination it credits.
+func (s *signerSet) pegWitness(script []byte) (*destination, bool) {
+	if bytes.Equal(script, s.redeemScript) {
+		return nil, true
+	}
+	if len(script) < 2 || !bytes.HasSuffix(script, s.redeemScript) {
+		return nil, false
+	}
+	prefix := script[:len(script)-len(s.redeemScript)]
+	n := int(prefix[0])
+	if len(prefix) != 1+n+1 || prefix[len(prefix)-1] != txscript.OP_DROP {
+		return nil, false
+	}
+	d, err := decodeDestination(prefix[1 : 1+n])
+	if err != nil {
+		return nil, false
+	}
+	return &d, true
 }
 
 // indexOf returns the position of pub in the set, or -1.

@@ -230,6 +230,18 @@ func (h *harness) pegOut(value int64, dest destination) *wire.MsgTx {
 	return tx
 }
 
+// toPeg is what tx pays back to the peg address: change, topped up to
+// pegDust when the payout would otherwise leave none.
+func (h *harness) toPeg(tx *wire.MsgTx) int64 {
+	var v int64
+	for _, out := range tx.TxOut {
+		if bytes.Equal(out.PkScript, h.b.signers.pkScript()) {
+			v += out.Value
+		}
+	}
+	return v
+}
+
 // lastBTC is the latest transaction on Bitcoin.
 func (h *harness) lastBTC() *wire.MsgTx { return h.btc.txs[len(h.btc.txs)-1].tx }
 
@@ -562,7 +574,7 @@ func TestRefundHeldDeposit(t *testing.T) {
 	_, err := h.b.refund(op, aliceOnBTC, false)
 	require.NoError(err)
 	refundTx := h.btc.txs[len(h.btc.txs)-1].tx
-	require.Equal(150*btc-h.feeOf(refundTx), paidTo(h.btc, aliceOnBTC), "150 BTC less the network fee")
+	require.Equal(150*btc-h.feeOf(refundTx)-h.toPeg(refundTx), paidTo(h.btc, aliceOnBTC), "150 BTC less the network fee, and the change the peg keeps")
 	refunded, ok := parseRefund(refundTx)
 	require.True(ok)
 	require.Equal(op, refunded)
@@ -573,7 +585,7 @@ func TestRefundHeldDeposit(t *testing.T) {
 	require.Zero(a.UnclaimedOnBTC)
 	require.True(a.solvent(), "%+v", a)
 	require.Equal(int64(50*btc), a.Circulating)
-	require.Equal(int64(50*btc), a.Locked)
+	require.Equal(int64(50*btc+pegDust), a.Locked, "the refund's change stays in the peg")
 	_, err = h.b.refund(op, aliceOnBTC, false)
 	require.ErrorContains(err, "already refunded")
 

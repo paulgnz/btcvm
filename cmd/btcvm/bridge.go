@@ -290,7 +290,7 @@ func (b *bridge) load() (*pegState, error) {
 	}
 	var all []deposit
 	for _, t := range btcTxs {
-		if spendsAny(t.tx, pegOuts) {
+		if spendsAny(t.tx, pegOuts) || b.signers.spendsPeg(t.tx) {
 			// Only the signers can spend peg outputs; outputs back to the
 			// peg are change, not deposits.
 			hash := t.tx.TxHash()
@@ -647,9 +647,13 @@ func (s *pegState) pegSpends(inputs []utxo) ([]spent, []destination, error) {
 	return prev, register, nil
 }
 
-// bitcoinDust is the smallest output the bridge creates: Bitcoin Core's
+// bitcoinDust is the smallest output the bridge pays out: Bitcoin Core's
 // dust threshold for a P2PKH output, the largest of the standard ones.
 const bitcoinDust = 546
+
+// pegDust is the smallest change a payout returns to the peg: Bitcoin
+// Core's dust threshold for a P2WSH output.
+const pegDust = 330
 
 // buildPayout is the unsigned Bitcoin transaction paying value, less the
 // fee at feeRate sat/vB, to dest from inputs, which spend prev. Like
@@ -680,13 +684,18 @@ func (b *bridge) buildPayout(inputs []utxo, prev []spent, value int64, dest dest
 		}
 	}
 	tx.AddTxOut(wire.NewTxOut(0, dest.pkScript())) // value set below
-	// Change too small to relay goes to the fee.
-	if change := total - value; change >= bitcoinDust {
-		tx.AddTxOut(wire.NewTxOut(change, b.signers.pkScript()))
+	// Every payout pays something back to the shared peg address, which
+	// every signer watches from the start, so every signer's wallet lists
+	// it and knows the peg-out is paid. Change below pegDust is topped up
+	// from the payout.
+	change, topUp := total-value, int64(0)
+	if change < pegDust {
+		change, topUp = pegDust, pegDust-change
 	}
+	tx.AddTxOut(wire.NewTxOut(change, b.signers.pkScript()))
 	tx.AddTxOut(nullData(data))
 	fee := feeRate * b.signers.witnessVSize(tx, scriptSizes)
-	pays := value - fee
+	pays := value - fee - topUp
 	if pays < bitcoinDust || fee > value/2 {
 		return nil, fmt.Errorf("the %s BTC network fee at %d sat/vB would take more than half of %s BTC; waiting for lower fees",
 			formatBTC(fee), feeRate, formatBTC(value))

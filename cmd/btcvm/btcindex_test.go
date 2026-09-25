@@ -113,6 +113,7 @@ func (f *fakeBTC) rawTx(txid chainhash.Hash) (*wire.MsgTx, error) {
 	}
 	return nil, errors.New("no such transaction")
 }
+
 // txOut is an output unspent in a block (the fake's UTXO set: mempool
 // spends don't count, as gettxout with include_mempool false).
 func (f *fakeBTC) txOut(op wire.OutPoint) (int64, []byte, int64, bool, error) {
