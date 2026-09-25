@@ -350,3 +350,24 @@ func TestOneStuckPayoutDoesNotBlockTheRest(t *testing.T) {
 	_, err = h.b.step()
 	require.ErrorContains(err, "more than half", "the small one waits, and says why")
 }
+
+// TestUnconfirmedDepositIsNotRefunded: a held deposit is refunded only
+// once it has the confirmations a credit of it would need.
+func TestUnconfirmedDepositIsNotRefunded(t *testing.T) {
+	require := require.New(t)
+	h := newHarness(t)
+	alice := h.user(1)
+	h.deposit(50*btc, &alice, 6) // something to pay from
+	require.NotEmpty(h.step())
+	h.vm.mine()
+	held := h.deposit(30*btc, nil, 0) // no destination: held
+	op := wire.OutPoint{Hash: held.TxHash()}
+
+	_, err := h.b.refund(op, h.user(9), false)
+	require.ErrorContains(err, "0 of 6 confirmations")
+	for i := 0; i < 6; i++ {
+		h.btc.mine()
+	}
+	_, err = h.b.refund(op, h.user(9), false)
+	require.NoError(err)
+}

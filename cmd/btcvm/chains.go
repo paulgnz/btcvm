@@ -8,6 +8,7 @@ import (
 	"math"
 	"strings"
 	"sync/atomic"
+	"time"
 
 	"github.com/MetalBlockchain/btcvm/btcd/btcutil"
 	"github.com/MetalBlockchain/btcvm/btcd/chaincfg/chainhash"
@@ -187,24 +188,44 @@ func walletName(url string) (base, name string) {
 const errWalletNotFound = -18
 
 // ensureWallet loads the bridge's wallet, creating it the first time as a
-// blank, watch-only descriptor wallet: it holds addresses, never keys.
+// blank, watch-only descriptor wallet: it holds addresses, never keys. The
+// bridge and web server start together, so another process may be loading
+// or creating it at the same moment: then it waits for that to finish.
 func (c *btcChain) ensureWallet() error {
 	base, name := walletName(c.rpc.url)
 	if name == "" {
 		return nil // the node's default wallet
 	}
-	err := c.rpc.call(nil, "getwalletinfo")
-	if !isRPCCode(err, errWalletNotFound) {
-		return err
-	}
 	node := newRPCClient(base, c.rpc.user, c.rpc.pass)
-	if err := node.call(nil, "loadwallet", name); err == nil || !isRPCCode(err, errWalletNotFound) {
-		return err
+	deadline := time.Now().Add(time.Minute)
+	for {
+		err := c.rpc.call(nil, "getwalletinfo")
+		if !isRPCCode(err, errWalletNotFound) {
+			return err // loaded, or a real error
+		}
+		err = node.call(nil, "loadwallet", name)
+		if isRPCCode(err, errWalletNotFound) {
+			err = node.callNamed(nil, "createwallet", map[string]any{
+				"wallet_name": name, "disable_private_keys": true, "blank": true, "descriptors": true,
+			})
+		}
+		switch {
+		case err == nil, isRPCCode(err, errWalletAlreadyLoaded):
+			return nil
+		case isRPCCode(err, errWalletBusy) && time.Now().Before(deadline):
+			time.Sleep(500 * time.Millisecond) // being loaded or created by another process
+		default:
+			return err
+		}
 	}
-	return node.callNamed(nil, "createwallet", map[string]any{
-		"wallet_name": name, "disable_private_keys": true, "blank": true, "descriptors": true,
-	})
 }
+
+// Bitcoin Core's codes for a wallet another request has just loaded, or is
+// loading or creating now.
+const (
+	errWalletAlreadyLoaded = -35
+	errWalletBusy          = -4
+)
 
 // importTx adds one transaction, already in a block, to the wallet without a
 // rescan: this node proves it is in the chain (gettxoutproof) and the wallet

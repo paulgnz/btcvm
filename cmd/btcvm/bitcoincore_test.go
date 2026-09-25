@@ -8,7 +8,6 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"os/exec"
-	"path/filepath"
 	"strings"
 	"testing"
 	"time"
@@ -25,6 +24,9 @@ import (
 // mainnet nodes relay too.
 type regtestNode struct {
 	t        *testing.T
+	bitcoind string
+	args     []string
+	cmd      *exec.Cmd
 	settings settings
 	funder   *rpcClient // a wallet holding mined coins
 	node     *rpcClient
@@ -50,31 +52,51 @@ func startRegtest(t *testing.T, extra ...string) *regtestNode {
 	args := append([]string{"-regtest", "-datadir=" + dir, "-txindex", "-acceptnonstdtxn=0",
 		"-listen=0", fmt.Sprintf("-rpcport=%d", rpcPort), "-rpcuser=test", "-rpcpassword=" + pass,
 		"-fallbackfee=0.0002", "-printtoconsole=0"}, extra...)
-	cmd := exec.Command(bitcoind, args...)
-	require.NoError(t, cmd.Start())
+	n := &regtestNode{t: t, bitcoind: bitcoind, args: args}
+	n.start()
 	t.Cleanup(func() {
-		_ = cmd.Process.Kill()
-		_ = cmd.Wait()
+		_ = n.cmd.Process.Kill()
+		_ = n.cmd.Wait()
 	})
 
-	n := &regtestNode{t: t}
 	n.settings = settings{
 		btcRPC: fmt.Sprintf("http://127.0.0.1:%d", rpcPort), btcUser: "test", btcPass: pass,
 		btcNet: "regtest", btcWallet: "btcvm", btcParams: &chaincfg.RegressionNetParams,
 	}
 	n.node = n.settings.btcWalletClient("")
-	deadline := time.Now().Add(30 * time.Second)
-	for {
-		if err := n.node.call(nil, "getblockchaininfo"); err == nil {
-			break
-		}
-		require.True(t, time.Now().Before(deadline), "bitcoind did not start (%s)", filepath.Join(dir, "regtest", "debug.log"))
-		time.Sleep(200 * time.Millisecond)
-	}
+	n.waitReady()
 	require.NoError(t, n.node.callNamed(nil, "createwallet", map[string]any{"wallet_name": "funder"}))
 	n.funder = n.settings.btcWalletClient("funder")
 	n.mine(101) // mature coinbases to spend
 	return n
+}
+
+func (n *regtestNode) start(extra ...string) {
+	n.cmd = exec.Command(n.bitcoind, append(append([]string{}, n.args...), extra...)...)
+	require.NoError(n.t, n.cmd.Start())
+}
+
+func (n *regtestNode) waitReady() {
+	deadline := time.Now().Add(30 * time.Second)
+	for {
+		if err := n.node.call(nil, "getblockchaininfo"); err == nil {
+			return
+		}
+		require.True(n.t, time.Now().Before(deadline), "bitcoind did not start")
+		time.Sleep(200 * time.Millisecond)
+	}
+}
+
+// restart stops the node and starts it again with extra arguments,
+// reloading the named wallets.
+func (n *regtestNode) restart(wallets []string, extra ...string) {
+	require.NoError(n.t, n.node.call(nil, "stop"))
+	_ = n.cmd.Wait()
+	n.start(extra...)
+	n.waitReady()
+	for _, w := range wallets {
+		require.NoError(n.t, n.node.call(nil, "loadwallet", w))
+	}
 }
 
 func (n *regtestNode) mine(blocks int) {
@@ -311,4 +333,68 @@ func TestScanFindsOldCoins(t *testing.T) {
 		}
 	}
 	require.True(found, "%v", utxos)
+}
+
+// TestWalletLoadsOnceWhenStartedTogether: the bridge and web server start
+// at the same moment, and both must come up with the wallet loaded.
+func TestWalletLoadsOnceWhenStartedTogether(t *testing.T) {
+	n := startRegtest(t)
+	errs := make(chan error, 6)
+	for i := 0; i < 6; i++ {
+		go func() { errs <- (&btcChain{rpc: n.settings.btcRPCClient()}).ensureWallet() }()
+	}
+	for i := 0; i < 6; i++ {
+		require.NoError(t, <-errs)
+	}
+}
+
+// TestEvictedPayoutKeepsThePegSolvent: a payout that falls out of Bitcoin
+// Core's mempool (here, a restart that drops the mempool and raises the
+// minimum relay fee) must not make the audit report the peg insolvent,
+// which would stop the bridge and signers bumping it; the bump then gets
+// it paid.
+func TestEvictedPayoutKeepsThePegSolvent(t *testing.T) {
+	require := require.New(t)
+	n := startRegtest(t)
+	h := newHarness(t)
+	c := &btcChain{rpc: n.settings.btcRPCClient()}
+	require.NoError(c.ensureWallet())
+	h.b.btc, h.b.btcParams = c, &chaincfg.RegressionNetParams
+	h.b.minFeeRate, h.b.maxFeeRate = 1, 100
+	rate := int64(2)
+	h.b.feeRate = func() (int64, error) { return rate, nil }
+	h.b.minDeposit, h.b.minPegOut = 10_000, 30_000
+	require.NoError(watchPeg(h.b, false))
+
+	alice := h.user(1)
+	depositAddr, err := registerDeposit(h.b, alice)
+	require.NoError(err)
+	require.NoError(n.funder.call(nil, "sendtoaddress", depositAddr.EncodeAddress(), 0.3))
+	n.mine(6)
+	require.NotEmpty(h.step())
+	h.vm.mine()
+	h.pegOut(btc/10, n.newAddress())
+	require.NotEmpty(h.step())
+	before := h.audit()
+	require.True(before.solvent(), "%+v", before)
+
+	// The payout leaves the mempool.
+	n.restart([]string{"btcvm", "funder"}, "-persistmempool=0", "-minrelaytxfee=0.00005")
+	a := h.audit()
+	require.True(a.solvent(), "%+v", a)
+	require.Equal(before.Locked, a.Locked)
+	require.Equal(int64(btc/10), a.PendingPegOuts, "the evicted payout is still owed")
+
+	// Fees rise and it has waited: the bridge bumps it, the node takes it,
+	// and once it confirms nothing is owed.
+	h.b.bumpAfter = time.Nanosecond
+	rate = 20
+	did, err := h.b.step()
+	require.NoError(err)
+	require.Contains(did, "replaced")
+	n.mine(1)
+	a = h.audit()
+	require.True(a.solvent(), "%+v", a)
+	require.Zero(a.PendingPegOuts)
+	require.Empty(h.step())
 }

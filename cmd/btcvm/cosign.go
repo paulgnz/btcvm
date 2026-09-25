@@ -601,6 +601,9 @@ func (c *cosigner) check(req signRequest) (*wire.MsgTx, []spent, int64, error) {
 			if !ok {
 				return nil, nil, 0, fmt.Errorf("deposit %v is not held for a refund in this signer's view", op)
 			}
+			if err := b.refundable(d); err != nil {
+				return nil, nil, 0, err
+			}
 			if dest, err = parseDest(req.Action.To); err != nil {
 				return nil, nil, 0, err
 			}
