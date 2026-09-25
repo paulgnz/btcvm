@@ -73,8 +73,8 @@
 
     <h2 id="wallets">Wallets</h2>
     <p><strong>In the browser.</strong> The <a href="/">bridge page</a> is a wallet: your key is made in the browser and never leaves it. Protect it with a passkey, for example one saved in 1Password, and opening the wallet takes the passkey. Passkey protection needs a passkey provider that supports the PRF extension; older security keys don't. Every coin a payment spends is checked against the raw transaction that created it, so the server can't inflate a fee. Before anything is signed, the wallet shows what the payment does (who's paid, the change back to you, a withdrawal's Bitcoin address, and the fee), read from the transaction itself, and signs only once you confirm.</p>
-    <p><strong>On a Mac.</strong> A <a href="/download">Mac app</a> is in development: the key encrypted to the Mac's Secure Enclave, Touch ID for every payment, and import from a Bitcoin Core <code>wallet.dat</code>.</p>
-    <p>The web wallet is open source, in the <a href="https://github.com/MetalBlockchain/btcvm">BTCVM repository</a> (<code>cmd/btcvm/web</code>).</p>
+    <p><strong>On a Mac.</strong> A <a href="/download">Mac app</a> is being tested before its first release: the key encrypted to the Mac's Secure Enclave, Touch ID for every payment, and import from a Bitcoin Core <code>wallet.dat</code>, whose keys are read on the Mac and never sent anywhere.</p>
+    <p>The web wallet is open source, in the <a href="https://github.com/paulgnz/btcvm/tree/feature/bitcoin-bridge">BTCVM repository</a> (<code>cmd/btcvm/web</code>).</p>
     <p>Whichever you use, back up your key. It's your wallet on both networks, and without it the BTC can't be recovered.</p>
 
     <h2 id="developers">For developers</h2>
@@ -90,10 +90,17 @@ GET  /api/deposits/{address}   deposits for a BTCVM address
 GET  /api/pegout/{txid}        a withdrawal's status
 POST /api/deposit-address      {"address": …}: your deposit address
 POST /api/tx                   {"hex": …}: broadcast on BTCVM
-GET  /api/health               checks, for uptime monitors</pre>
-    <p>The source, including the chain, the bridge, both wallets' code and the deployment scripts, is on <a href="https://github.com/MetalBlockchain/btcvm">GitHub</a>.</p>
+GET  /api/health               checks, for uptime monitors
+POST /api/btc/watch            {"address": …}: follow a Bitcoin address
+GET  /api/btc/address/{address} its Bitcoin balance, coins and history
+POST /api/btc/import           {"address": …, "txid": …}: add an older payment
+GET  /api/btc/rawtx/{txid}     a Bitcoin transaction's bytes
+POST /api/btc/tx               {"hex": …}: broadcast on Bitcoin
+POST /api/btc/scan             {"addresses": […]}: find coins (a job)
+GET  /api/btc/scan/{id}        that job's progress and coins found</pre>
+    <p>The source, including the chain, the bridge, the web wallet and the deployment scripts, is on <a href="https://github.com/paulgnz/btcvm/tree/feature/bitcoin-bridge">GitHub</a>.</p>
 
     <h2 id="security">Security</h2>
-    <p>Please report vulnerabilities privately through <a href="https://github.com/MetalBlockchain/btcvm/security/advisories/new">GitHub's security advisories</a>, not in a public issue.</p>
+    <p>Please report vulnerabilities privately through <a href="https://github.com/paulgnz/btcvm/security/advisories/new">GitHub's security advisories</a>, not in a public issue.</p>
   </main>
 {{end}}
