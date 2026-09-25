@@ -24,7 +24,7 @@ var siteNav = []navLink{
 	{Path: "/explorer", Label: "Explorer"},
 	{Path: "/roadmap", Label: "Roadmap"},
 	{Path: "/docs", Label: "Docs"},
-	{Path: "/download", Label: "Download", CTA: true},
+	{Path: "/download", Label: "Mac app", CTA: true},
 }
 
 type sitePage struct {

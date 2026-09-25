@@ -27,7 +27,7 @@
       {{- end}}{{end}}
     </nav>
     {{- range .Nav}}{{if .CTA}}
-    <a class="nav-cta" href="{{.Path}}"{{if eq .Path $.Path}} aria-current="page"{{end}}>{{.Label}}<span class="nav-more">&nbsp;for Mac</span></a>
+    <a class="nav-cta" href="{{.Path}}"{{if eq .Path $.Path}} aria-current="page"{{end}}>{{.Label}}</a>
     {{- end}}{{end}}
   </header>
   <span id="content" tabindex="-1"></span>
