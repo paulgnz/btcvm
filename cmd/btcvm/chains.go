@@ -278,8 +278,19 @@ func (c *btcChain) watch(address btcutil.Address, rescan bool) error {
 		Warnings []string  `json:"warnings"`
 	}
 	req := []map[string]any{{"desc": info.Descriptor, "timestamp": timestamp, "label": "btcvm"}}
-	if err := c.rpc.call(&results, "importdescriptors", req); err != nil {
-		return err
+	// The bridge, web server and monitor share the wallet, and start
+	// together: while one's import rescans, the wallet turns the others
+	// away. Wait for it.
+	deadline := time.Now().Add(5 * time.Minute)
+	for {
+		err := c.rpc.call(&results, "importdescriptors", req)
+		if err == nil {
+			break
+		}
+		if !isRPCCode(err, errWalletBusy) || time.Now().After(deadline) {
+			return err
+		}
+		time.Sleep(2 * time.Second)
 	}
 	// A pruned node rescans only the blocks it still has, and says so in a
 	// warning: payments older than that are not found.
