@@ -8,10 +8,10 @@
 # Core 31.1 (checked against the release's SHA-256, whose SHA256SUMS file is
 # signed by Bitcoin Core's builders), and creates and starts two services:
 #
-#   bitcoind-main   Bitcoin Core on mainnet, with -txindex. The first sync
-#                   takes a day or more and needs about 750 GB (late 2026)
-#                   and growing: mount a 1.5 TB or larger NVMe volume at
-#                   /var/lib/bitcoin-main before running this.
+#   bitcoind-main   Bitcoin Core on mainnet, pruned: it downloads and checks
+#                   every block, but keeps only the latest PRUNE_MB (default
+#                   60 GB) of them, so it needs about 100 GB of disk in all.
+#                   The first sync takes a day or more.
 #   metal-mainnet   a Metal mainnet node, syncing only the P-Chain until the
 #                   BTCVM L1 exists.
 #
@@ -35,6 +35,7 @@ BITCOIN_SHA256=b80d9c3e04da78fb6f0569685673418cf686fadba9042d926d13fb87ff503f9e
 HOME_DIR=/opt/btcvm
 STATE=/var/lib/metal-main
 BTC_DATA=/var/lib/bitcoin-main
+PRUNE_MB=${PRUNE_MB:-60000}
 IP=$(curl -s4 https://ifconfig.me)
 
 log() { echo "provision: $*"; }
@@ -87,10 +88,12 @@ if ! /opt/bitcoin/bin/bitcoind -version 2>/dev/null | grep -q "v$BITCOIN_VERSION
 fi
 if [[ ! -f "$BTC_DATA/bitcoin.conf" ]]; then
   # The bridge keeps a watch-only descriptor wallet here ("btcvm"); it holds
-  # addresses, never keys. dbcache speeds the first sync; lower it after.
+  # addresses, never keys. Pruning keeps weeks of recent blocks, enough for
+  # a signer to rescan for a deposit it missed. dbcache speeds the first
+  # sync; lower it after.
   cat >"$BTC_DATA/bitcoin.conf" <<EOF
 server=1
-txindex=1
+prune=$PRUNE_MB
 dbcache=8000
 maxconnections=40
 maxuploadtarget=20000
@@ -147,14 +150,7 @@ ufw --force enable >/dev/null
 systemctl daemon-reload
 systemctl enable --now metal-mainnet >/dev/null
 systemctl restart metal-mainnet
-# Bitcoin Core fills a small root disk in hours, so it starts only once its
-# volume is mounted (ALLOW_ROOT_DISK=1 overrides).
-if mountpoint -q "$BTC_DATA" || [[ "${ALLOW_ROOT_DISK:-}" == 1 ]]; then
-  systemctl enable --now bitcoind-main >/dev/null
-else
-  log "$BTC_DATA is not a mounted volume: Bitcoin Core is installed but not started."
-  log "Mount a 1.5 TB+ volume there (with its contents, bitcoin.conf, moved in), then: systemctl enable --now bitcoind-main"
-fi
+systemctl enable --now bitcoind-main >/dev/null
 
 log "done"
 cat <<EOF
