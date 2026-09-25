@@ -37,7 +37,8 @@ type scanJob struct {
 
 type scanner struct {
 	rpc   *rpcClient // a client with a long timeout: a scan takes minutes
-	limit *rateLimit
+	limit *rateLimit // per client network
+	total *rateLimit // in all: scans share the bridge's Bitcoin node
 
 	mu      sync.Mutex
 	jobs    map[string]*scanJob
@@ -47,7 +48,7 @@ type scanner struct {
 func newScanner(base *rpcClient) *scanner {
 	rpc := newRPCClient(base.url, base.user, base.pass)
 	rpc.http.Timeout = 30 * time.Minute
-	return &scanner{rpc: rpc, limit: newRateLimit(5, time.Hour), jobs: map[string]*scanJob{}}
+	return &scanner{rpc: rpc, limit: newRateLimit(5, time.Hour), total: newRateLimit(10, time.Hour), jobs: map[string]*scanJob{}}
 }
 
 // btcScan starts a scan for up to maxScanAddresses Bitcoin addresses.
@@ -76,8 +77,11 @@ func (srv *server) btcScan(r *http.Request) (any, error) {
 	if sc.running != nil {
 		return nil, &apiError{http.StatusServiceUnavailable, "another scan is running; try again in a few minutes"}
 	}
-	if !sc.limit.allow(clientIP(r)) {
-		return nil, &apiError{http.StatusTooManyRequests, "too many scans from this IP; try later"}
+	if !sc.limit.allow(limitKey(r)) {
+		return nil, &apiError{http.StatusTooManyRequests, "too many scans from this network; try later"}
+	}
+	if !sc.total.allow("*") {
+		return nil, &apiError{http.StatusTooManyRequests, "the bridge has run as many scans as it allows this hour; try later"}
 	}
 	var id [12]byte
 	_, _ = rand.Read(id[:])

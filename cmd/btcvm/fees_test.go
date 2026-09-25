@@ -433,3 +433,23 @@ func TestRefundWaitsForTheBridge(t *testing.T) {
 	require.NoError(t, err, "free once the bridge stops")
 	again.Close()
 }
+
+// TestSigningLogRefusesAfterAConfirmedSignature: once a transaction this
+// signer signed for an action is in a block, it refuses to sign another,
+// even when its view says the old inputs are gone (spent, so "dead").
+func TestSigningLogRefusesAfterAConfirmedSignature(t *testing.T) {
+	require := require.New(t)
+	l, err := openSigningLog(t.TempDir() + "/signing-log.json")
+	require.NoError(err)
+	first := wire.NewMsgTx(3)
+	first.AddTxIn(wire.NewTxIn(&wire.OutPoint{Index: 1}, nil, nil))
+	require.NoError(l.record("payout:x", first, 100))
+
+	second := wire.NewMsgTx(3)
+	second.AddTxIn(wire.NewTxIn(&wire.OutPoint{Index: 2}, nil, nil))
+	noneUnspent := map[wire.OutPoint]bool{}
+	require.NoError(l.permit("payout:x", second, noneUnspent, func(string) bool { return false }),
+		"the old payment's inputs are gone and it isn't confirmed: it can't confirm")
+	require.ErrorContains(l.permit("payout:x", second, noneUnspent, func(txid string) bool { return txid == first.TxHash().String() }),
+		"in a block")
+}

@@ -43,6 +43,52 @@ type chain interface {
 	send(tx *wire.MsgTx) (chainhash.Hash, error)
 }
 
+// confirmer is a chain that can say whether a transaction is in a block.
+type confirmer interface {
+	confirmed(txid chainhash.Hash) (bool, error)
+}
+
+// confirmedOn returns a check of whether a transaction is in a block on c,
+// or nil if c can't tell. An error counts as not known to be confirmed.
+func confirmedOn(c chain) func(string) bool {
+	cc, ok := c.(confirmer)
+	if !ok {
+		return nil
+	}
+	return func(txid string) bool {
+		h, err := chainhash.NewHashFromStr(txid)
+		if err != nil {
+			return false
+		}
+		yes, err := cc.confirmed(*h)
+		return err == nil && yes
+	}
+}
+
+// confirmed reports whether the wallet has txid in a block.
+func (c *btcChain) confirmed(txid chainhash.Hash) (bool, error) {
+	var t struct {
+		Confirmations int64 `json:"confirmations"`
+	}
+	err := c.rpc.callNamed(&t, "gettransaction", map[string]any{"txid": txid.String()})
+	if isRPCCode(err, errNotWalletTx) {
+		return false, nil
+	}
+	return t.Confirmations > 0, err
+}
+
+// confirmed reports whether BTCVM has txid in a block (its node keeps a
+// transaction index).
+func (c *vmChain) confirmed(txid chainhash.Hash) (bool, error) {
+	var t struct {
+		Confirmations int64 `json:"confirmations"`
+	}
+	if err := c.rpc.call(&t, "getrawtransaction", txid.String(), 1); err != nil {
+		return false, err
+	}
+	return t.Confirmations > 0, nil
+}
+
 func decodeTx(hexTx string) (*wire.MsgTx, error) {
 	raw, err := hex.DecodeString(hexTx)
 	if err != nil {

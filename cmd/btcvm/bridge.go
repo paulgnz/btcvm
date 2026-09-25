@@ -259,7 +259,20 @@ func (b *bridge) load() (*pegState, error) {
 	if err != nil {
 		return nil, fmt.Errorf("reading BTCVM reserve: %w", err)
 	}
+	// btcd reports a reserve output as unspent while a transaction in its
+	// mempool spends it, so the outputs known transactions spend are left
+	// out here: otherwise a release in flight counts both its input and its
+	// change, and the reserve looks larger than it is.
+	spentByKnown := map[wire.OutPoint]bool{}
+	for _, t := range vmTxs {
+		for _, in := range t.tx.TxIn {
+			spentByKnown[in.PreviousOutPoint] = true
+		}
+	}
 	for _, u := range held {
+		if spentByKnown[u.outPoint] {
+			continue
+		}
 		if u.confirmations == 0 && !signerSpends[u.outPoint.Hash] {
 			continue
 		}
@@ -498,6 +511,23 @@ func (b *bridge) logWaiting(failed error) {
 	}
 }
 
+// selectForPayout picks the peg outputs a payout spends: the smallest one
+// that covers value, so a payout that stalls ties up as little of the peg as
+// it can; or, if none does alone, the fewest, largest first.
+func selectForPayout(utxos []utxo, value int64) ([]utxo, error) {
+	var best *utxo
+	for i := range utxos {
+		if u := &utxos[i]; u.value >= value && (best == nil || u.value < best.value) {
+			best = u
+		}
+	}
+	if best != nil {
+		return []utxo{*best}, nil
+	}
+	inputs, _, err := selectUTXOs(utxos, value)
+	return inputs, err
+}
+
 // selectUTXOs picks outputs, largest first, until they cover amount.
 func selectUTXOs(utxos []utxo, amount int64) ([]utxo, int64, error) {
 	sorted := append([]utxo(nil), utxos...)
@@ -545,7 +575,9 @@ func (b *bridge) buildRelease(inputs []utxo, total int64, d deposit) *wire.MsgTx
 		tx.AddTxIn(wire.NewTxIn(&u.outPoint, nil, nil))
 	}
 	tx.AddTxOut(wire.NewTxOut(d.value-b.vmFee, d.dest.pkScript()))
-	if change := total - d.value; change > 0 {
+	// Change below the dust threshold would make the release unrelayable,
+	// so it goes to the fee.
+	if change := total - d.value; change >= pegDust {
 		tx.AddTxOut(wire.NewTxOut(change, b.signers.pkScript()))
 	}
 	tx.AddTxOut(nullData(encodeRelease(d.outPoint)))
@@ -608,7 +640,7 @@ func (b *bridge) payFromPeg(s *pegState, value int64, dest destination, data []b
 			confirmed = append(confirmed, u)
 		}
 	}
-	inputs, _, err := selectUTXOs(confirmed, value)
+	inputs, err := selectForPayout(confirmed, value)
 	if err != nil {
 		return chainhash.Hash{}, 0, err
 	}
@@ -664,7 +696,10 @@ func (b *bridge) buildPayout(inputs []utxo, prev []spent, value int64, dest dest
 		return nil, errors.New("inputs and spent outputs differ")
 	}
 	var total int64
-	tx := wire.NewMsgTx(2)
+	// Version 3 (TRUC, BIP431): any child spending an output of the payout
+	// before it confirms is limited to 1,000 vB, so nobody can pin it with
+	// a large low-fee child that makes it too costly to replace.
+	tx := wire.NewMsgTx(3)
 	scriptSizes := make([]int, len(inputs))
 	for i, u := range inputs {
 		in := wire.NewTxIn(&u.outPoint, nil, nil)
@@ -707,7 +742,7 @@ func (b *bridge) buildPayout(inputs []utxo, prev []spent, value int64, dest dest
 // payoutFee is what a payout at feeRate from one personal deposit output
 // costs: an estimate to show users before they withdraw.
 func (b *bridge) payoutFee(feeRate int64) int64 {
-	tx := wire.NewMsgTx(2)
+	tx := wire.NewMsgTx(3)
 	tx.AddTxIn(wire.NewTxIn(&wire.OutPoint{}, nil, nil))
 	tx.AddTxOut(wire.NewTxOut(0, destination{kind: destP2TR}.pkScript()))
 	tx.AddTxOut(wire.NewTxOut(0, b.signers.pkScript()))

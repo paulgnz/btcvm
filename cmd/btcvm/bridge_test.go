@@ -147,6 +147,16 @@ func (c *fakeChain) send(tx *wire.MsgTx) (chainhash.Hash, error) {
 	return tx.TxHash(), nil
 }
 
+// confirmed is confirmer for the fake chain.
+func (c *fakeChain) confirmed(txid chainhash.Hash) (bool, error) {
+	for _, t := range c.txs {
+		if t.tx.TxHash() == txid {
+			return t.confirmations > 0, nil
+		}
+	}
+	return false, nil
+}
+
 // add puts tx on the chain with the given confirmations, without checks.
 func (c *fakeChain) add(tx *wire.MsgTx, confirmations int64) {
 	c.txs = append(c.txs, &chainTx{tx: tx, confirmations: confirmations})

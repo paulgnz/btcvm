@@ -695,7 +695,11 @@ func (c *cosigner) check(req signRequest) (*wire.MsgTx, []spent, int64, error) {
 	if err != nil {
 		return nil, nil, 0, err
 	}
-	if err := c.log.permit(key, tx, unspent); err != nil {
+	chainOf := b.vm
+	if req.Chain == chainBitcoin {
+		chainOf = b.btc
+	}
+	if err := c.log.permit(key, tx, unspent, confirmedOn(chainOf)); err != nil {
 		return nil, nil, 0, err
 	}
 	if c.maxDaily > 0 && !c.log.has(key) &&
@@ -892,10 +896,19 @@ func (l *signingLog) has(key string) bool { return l.Actions[key] != nil }
 // permit checks tx may be signed for the action key. unspent holds the peg
 // outputs still unspent, confirmed or not: an earlier transaction spending
 // one that is gone can no longer confirm.
-func (l *signingLog) permit(key string, tx *wire.MsgTx, unspent map[wire.OutPoint]bool) error {
+func (l *signingLog) permit(key string, tx *wire.MsgTx, unspent map[wire.OutPoint]bool, confirmed func(txid string) bool) error {
 	a := l.Actions[key]
 	if a == nil {
 		return nil
+	}
+	// A transaction this signer signed for the action that is in a block
+	// means the action is done, whatever this signer's view of the peg
+	// says: its view may be missing it (a truncated or rebuilt wallet), and
+	// its inputs being spent must not make it look dead.
+	for _, prev := range a.Txs {
+		if confirmed != nil && confirmed(prev.Txid) {
+			return fmt.Errorf("already signed %s for %s, and it is in a block", prev.Txid, key)
+		}
 	}
 	spends := map[string]bool{}
 	for _, in := range tx.TxIn {
