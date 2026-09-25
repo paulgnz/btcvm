@@ -29,3 +29,4 @@ update-key*
 /cmd/btcvm/btcvm
 /btcvm
 /btcvm-plugin
+/btcvm-l1
