@@ -9,10 +9,10 @@ import (
 	"os"
 	"path/filepath"
 
-	"github.com/MetalBlockchain/btcvm/btcd/blockchain"
-	"github.com/MetalBlockchain/btcvm/btcd/chaincfg"
-	"github.com/MetalBlockchain/btcvm/btcd/chaincfg/chainhash"
-	"github.com/MetalBlockchain/btcvm/btcd/database"
+	"github.com/MetalBlockchain/dogecoin-vm/btcd/blockchain"
+	"github.com/MetalBlockchain/dogecoin-vm/btcd/chaincfg"
+	"github.com/MetalBlockchain/dogecoin-vm/btcd/chaincfg/chainhash"
+	"github.com/MetalBlockchain/dogecoin-vm/btcd/database"
 )
 
 const blockDbNamePrefix = "blocks"

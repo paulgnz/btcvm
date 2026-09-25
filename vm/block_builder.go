@@ -8,8 +8,8 @@ import (
 	"sync"
 	"time"
 
-	"github.com/MetalBlockchain/btcvm/btcd/btcutil"
-	"github.com/MetalBlockchain/btcvm/btcd/chaincfg/chainhash"
+	"github.com/MetalBlockchain/dogecoin-vm/btcd/btcutil"
+	"github.com/MetalBlockchain/dogecoin-vm/btcd/chaincfg/chainhash"
 	"github.com/MetalBlockchain/metalgo/snow/engine/common"
 	"go.uber.org/zap"
 )
@@ -89,29 +89,30 @@ func (b *blockBuilder) onTxAccepted(tx *btcutil.Tx) {
 	}
 }
 
-// signalCanBuild marks that transactions are available and schedules block building
-// It starts a goroutine that waits for the appropriate delay before notifying the engine
+// signalCanBuild marks that transactions are available and wakes
+// waitForEvent, which the engine polls to learn when to build.
 func (b *blockBuilder) signalCanBuild() {
-	b.vm.ctx.Log.Info("signalCanBuild called - transactions are available")
-
 	b.lock.Lock()
-	alreadyPending := b.hasPendingTxs
 	b.hasPendingTxs = true
 	b.lock.Unlock()
 
-	// If we already have a pending build scheduled, don't start another one
-	if alreadyPending {
-		b.vm.ctx.Log.Info("signalCanBuild: build already scheduled, skipping")
-		return
-	}
-
 	b.pendingSignal.Broadcast()
-	b.vm.ctx.Log.Info("signalCanBuild broadcasted to condition variable")
-	// Block build is driven by snowman via VM.WaitForEvent (NotificationForwarder).
 }
 
-// needToBuild returns true if there are pending transactions
+// needToBuild returns true if there are pending transactions and no verified
+// block is still being decided. Transactions stay in the mempool until their
+// block is accepted, so without the second check the builder would keep
+// building siblings of a block that is already in consensus.
 func (b *blockBuilder) needToBuild() bool {
+	if b.vm.hasProcessingBlocks() {
+		return false
+	}
+	// Blocks that create the peg reserve are built even with nothing in
+	// the mempool, or the reserve would wait for the first transaction.
+	next := b.vm.chain.BestSnapshot().Height + 1
+	if b.vm.config.ChainParams.PegReserveAt(next) > 0 {
+		return true
+	}
 	mempool := b.vm.btcdAdapter.TxMemPool()
 	if mempool == nil {
 		return false
@@ -289,4 +290,3 @@ func (b *blockBuilder) clearPendingSignal() {
 	b.lock.Unlock()
 	b.vm.ctx.Log.Debug("cleared pending transaction signal")
 }
-

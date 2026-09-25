@@ -10,7 +10,7 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/MetalBlockchain/btcvm/btcd/btcjson"
+	"github.com/MetalBlockchain/dogecoin-vm/btcd/btcjson"
 )
 
 const (

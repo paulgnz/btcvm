@@ -9,7 +9,7 @@ import (
 	"math/rand"
 	"testing"
 
-	"github.com/MetalBlockchain/btcvm/btcd/btcutil"
+	"github.com/MetalBlockchain/dogecoin-vm/btcd/btcutil"
 )
 
 // TestTxFeePrioHeap ensures the priority queue for transaction fees and

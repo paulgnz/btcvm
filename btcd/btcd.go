@@ -11,13 +11,13 @@ import (
 	"path/filepath"
 	"runtime/debug"
 
-	"github.com/MetalBlockchain/btcvm/btcd/blockchain"
-	"github.com/MetalBlockchain/btcvm/btcd/blockchain/indexers"
-	"github.com/MetalBlockchain/btcvm/btcd/btcutil"
-	"github.com/MetalBlockchain/btcvm/btcd/database"
-	"github.com/MetalBlockchain/btcvm/btcd/limits"
-	"github.com/MetalBlockchain/btcvm/btcd/mining"
-	"github.com/MetalBlockchain/btcvm/btcd/ossec"
+	"github.com/MetalBlockchain/dogecoin-vm/btcd/blockchain"
+	"github.com/MetalBlockchain/dogecoin-vm/btcd/blockchain/indexers"
+	"github.com/MetalBlockchain/dogecoin-vm/btcd/btcutil"
+	"github.com/MetalBlockchain/dogecoin-vm/btcd/database"
+	"github.com/MetalBlockchain/dogecoin-vm/btcd/limits"
+	"github.com/MetalBlockchain/dogecoin-vm/btcd/mining"
+	"github.com/MetalBlockchain/dogecoin-vm/btcd/ossec"
 )
 
 const (
@@ -211,6 +211,18 @@ func (s *Server) GetBlockTemplateGenerator() *mining.BlkTmplGenerator {
 // Used for Avalanche consensus where PoW is not required
 func (s *Server) ProcessBlockNoPoW(block *btcutil.Block) (bool, bool, error) {
 	return s.chain.ProcessBlock(block, blockchain.BFNoPoWCheck)
+}
+
+// Close flushes the UTXO cache and closes the block database. It must be
+// called after Stop, once nothing else is using the chain. btcd normally
+// flushes from the sync manager's shutdown path, which never runs here
+// because the peer handler is not started.
+func (s *Server) Close() error {
+	s.WaitForShutdown()
+	if err := s.chain.FlushUtxoCache(blockchain.FlushRequired); err != nil {
+		return fmt.Errorf("failed to flush utxo cache: %w", err)
+	}
+	return s.db.Close()
 }
 
 // SetOnTxAccepted sets a callback for when transactions are accepted

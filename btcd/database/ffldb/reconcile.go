@@ -8,7 +8,7 @@ import (
 	"fmt"
 	"hash/crc32"
 
-	"github.com/MetalBlockchain/btcvm/btcd/database"
+	"github.com/MetalBlockchain/dogecoin-vm/btcd/database"
 )
 
 // The serialized write cursor location format is:

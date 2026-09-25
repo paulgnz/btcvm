@@ -57,7 +57,7 @@ func (vm *VM) initializeGossip() error {
 	)
 	vm.ctx.Log.Debug("Created gossip handler")
 
-	// Create p2p client for gossip (validators implement NodeSampler for the client)
+	// Create p2p client for gossip, sampling peers from the validator set
 	client := vm.p2pNetwork.NewClient(BTCGossipHandlerID, vm.p2pValidators)
 	vm.ctx.Log.Debug("Created p2p client", zap.Uint64("handlerID", BTCGossipHandlerID))
 
@@ -89,9 +89,9 @@ func (vm *VM) initializeGossip() error {
 		metrics,
 		pushGossipParams,
 		pushRegossipParams,
-		1000,                                // discardedSize
-		10,                                  // targetGossipSize
-		vm.gossipConfig.RegossipFrequency,   // maxRegossipFrequency
+		1000,                              // discardedSize
+		10,                                // targetGossipSize
+		vm.gossipConfig.RegossipFrequency, // maxRegossipFrequency
 	)
 	if err != nil {
 		return fmt.Errorf("failed to create push gossiper: %w", err)

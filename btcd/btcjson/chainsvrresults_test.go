@@ -10,9 +10,9 @@ import (
 	"reflect"
 	"testing"
 
-	"github.com/MetalBlockchain/btcvm/btcd/btcjson"
-	"github.com/MetalBlockchain/btcvm/btcd/btcutil"
-	"github.com/MetalBlockchain/btcvm/btcd/chaincfg/chainhash"
+	"github.com/MetalBlockchain/dogecoin-vm/btcd/btcjson"
+	"github.com/MetalBlockchain/dogecoin-vm/btcd/btcutil"
+	"github.com/MetalBlockchain/dogecoin-vm/btcd/chaincfg/chainhash"
 	"github.com/davecgh/go-spew/spew"
 )
 

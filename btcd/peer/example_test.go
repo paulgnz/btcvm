@@ -10,9 +10,9 @@ import (
 	"net"
 	"time"
 
-	"github.com/MetalBlockchain/btcvm/btcd/chaincfg"
-	"github.com/MetalBlockchain/btcvm/btcd/peer"
-	"github.com/MetalBlockchain/btcvm/btcd/wire"
+	"github.com/MetalBlockchain/dogecoin-vm/btcd/chaincfg"
+	"github.com/MetalBlockchain/dogecoin-vm/btcd/peer"
+	"github.com/MetalBlockchain/dogecoin-vm/btcd/wire"
 )
 
 // mockRemotePeer creates a basic inbound peer listening on the simnet port for

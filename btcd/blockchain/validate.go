@@ -12,11 +12,11 @@ import (
 	"math/big"
 	"time"
 
-	"github.com/MetalBlockchain/btcvm/btcd/btcutil"
-	"github.com/MetalBlockchain/btcvm/btcd/chaincfg"
-	"github.com/MetalBlockchain/btcvm/btcd/chaincfg/chainhash"
-	"github.com/MetalBlockchain/btcvm/btcd/txscript"
-	"github.com/MetalBlockchain/btcvm/btcd/wire"
+	"github.com/MetalBlockchain/dogecoin-vm/btcd/btcutil"
+	"github.com/MetalBlockchain/dogecoin-vm/btcd/chaincfg"
+	"github.com/MetalBlockchain/dogecoin-vm/btcd/chaincfg/chainhash"
+	"github.com/MetalBlockchain/dogecoin-vm/btcd/txscript"
+	"github.com/MetalBlockchain/dogecoin-vm/btcd/wire"
 )
 
 const (
@@ -202,6 +202,9 @@ func isBIP0030Node(node *blockNode) bool {
 // At the target block generation rate for the main network, this is
 // approximately every 4 years.
 func CalcBlockSubsidy(height int32, chainParams *chaincfg.Params) int64 {
+	if chainParams.NoBlockSubsidy {
+		return 0
+	}
 	if chainParams.SubsidyReductionInterval == 0 {
 		return baseSubsidy
 	}
@@ -877,10 +880,40 @@ func (b *BlockChain) checkBlockContext(block *btcutil.Block, prevNode *blockNode
 					blockWeight, MaxBlockWeight)
 				return ruleError(ErrBlockWeightTooHigh, str)
 			}
+		} else {
+			// Before segwit is active, witness data is not
+			// committed to by the block hash, so accepting it
+			// would let the same block ID carry arbitrary,
+			// unweighted bytes. Reject it, as Bitcoin Core does
+			// ("unexpected-witness"). DogecoinVM never activates
+			// segwit, so this always applies there.
+			for _, tx := range block.Transactions() {
+				if tx.MsgTx().HasWitness() {
+					str := fmt.Sprintf("block contains "+
+						"transaction %v with witness data "+
+						"before segwit is active", tx.Hash())
+					return ruleError(ErrUnexpectedWitness, str)
+				}
+			}
 		}
 	}
 
 	return nil
+}
+
+// checkPegReserveOutput ensures the coinbase pays the peg reserve amount to
+// the peg reserve script in a single output.
+func checkPegReserveOutput(coinbase *btcutil.Tx, params *chaincfg.Params) error {
+	reserve := params.PegReserve
+	for _, txOut := range coinbase.MsgTx().TxOut {
+		if txOut.Value == reserve.Amount &&
+			bytes.Equal(txOut.PkScript, reserve.PkScript) {
+			return nil
+		}
+	}
+	str := fmt.Sprintf("coinbase does not pay the peg reserve of %v "+
+		"to the peg reserve script", reserve.Amount)
+	return ruleError(ErrBadPegReserve, str)
 }
 
 // checkBIP0030 ensures blocks do not contain duplicate transactions which
@@ -1206,13 +1239,22 @@ func (b *BlockChain) checkConnectBlock(
 	for _, txOut := range transactions[0].MsgTx().TxOut {
 		totalSatoshiOut += txOut.Value
 	}
+	pegReserve := b.chainParams.PegReserveAt(node.height)
 	expectedSatoshiOut := CalcBlockSubsidy(node.height, b.chainParams) +
-		totalFees
+		totalFees + pegReserve
 	if totalSatoshiOut > expectedSatoshiOut {
 		str := fmt.Sprintf("coinbase transaction for block pays %v "+
 			"which is more than expected value of %v",
 			totalSatoshiOut, expectedSatoshiOut)
 		return ruleError(ErrBadCoinbaseValue, str)
+	}
+
+	// At peg reserve heights the reserve must go to the reserve script,
+	// not to whoever built the block.
+	if pegReserve > 0 {
+		if err := checkPegReserveOutput(transactions[0], b.chainParams); err != nil {
+			return err
+		}
 	}
 
 	// Don't run scripts if this node is before the latest known good

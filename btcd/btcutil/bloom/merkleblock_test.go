@@ -9,10 +9,10 @@ import (
 	"encoding/hex"
 	"testing"
 
-	"github.com/MetalBlockchain/btcvm/btcd/btcutil"
-	"github.com/MetalBlockchain/btcvm/btcd/btcutil/bloom"
-	"github.com/MetalBlockchain/btcvm/btcd/chaincfg/chainhash"
-	"github.com/MetalBlockchain/btcvm/btcd/wire"
+	"github.com/MetalBlockchain/dogecoin-vm/btcd/btcutil"
+	"github.com/MetalBlockchain/dogecoin-vm/btcd/btcutil/bloom"
+	"github.com/MetalBlockchain/dogecoin-vm/btcd/chaincfg/chainhash"
+	"github.com/MetalBlockchain/dogecoin-vm/btcd/wire"
 )
 
 func TestMerkleBlock3(t *testing.T) {

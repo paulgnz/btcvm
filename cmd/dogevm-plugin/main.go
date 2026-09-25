@@ -12,7 +12,7 @@ import (
 	"github.com/MetalBlockchain/metalgo/vms/rpcchainvm"
 	"github.com/spf13/cobra"
 
-	"github.com/MetalBlockchain/btcvm/vm"
+	"github.com/MetalBlockchain/dogecoin-vm/vm"
 
 	log "github.com/inconshreveable/log15"
 )
@@ -118,4 +118,3 @@ func runFunc(*cobra.Command, []string) error {
 	}
 	return nil
 }
-

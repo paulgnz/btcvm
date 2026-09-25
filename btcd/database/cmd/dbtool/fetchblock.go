@@ -9,8 +9,8 @@ import (
 	"errors"
 	"time"
 
-	"github.com/MetalBlockchain/btcvm/btcd/chaincfg/chainhash"
-	"github.com/MetalBlockchain/btcvm/btcd/database"
+	"github.com/MetalBlockchain/dogecoin-vm/btcd/chaincfg/chainhash"
+	"github.com/MetalBlockchain/dogecoin-vm/btcd/database"
 )
 
 // fetchBlockCmd defines the configuration options for the fetchblock command.

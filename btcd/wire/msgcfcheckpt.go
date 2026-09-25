@@ -9,7 +9,7 @@ import (
 	"fmt"
 	"io"
 
-	"github.com/MetalBlockchain/btcvm/btcd/chaincfg/chainhash"
+	"github.com/MetalBlockchain/dogecoin-vm/btcd/chaincfg/chainhash"
 )
 
 const (

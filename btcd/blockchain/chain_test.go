@@ -11,11 +11,11 @@ import (
 	"testing"
 	"time"
 
-	"github.com/MetalBlockchain/btcvm/btcd/blockchain/internal/testhelper"
-	"github.com/MetalBlockchain/btcvm/btcd/btcutil"
-	"github.com/MetalBlockchain/btcvm/btcd/chaincfg"
-	"github.com/MetalBlockchain/btcvm/btcd/chaincfg/chainhash"
-	"github.com/MetalBlockchain/btcvm/btcd/wire"
+	"github.com/MetalBlockchain/dogecoin-vm/btcd/blockchain/internal/testhelper"
+	"github.com/MetalBlockchain/dogecoin-vm/btcd/btcutil"
+	"github.com/MetalBlockchain/dogecoin-vm/btcd/chaincfg"
+	"github.com/MetalBlockchain/dogecoin-vm/btcd/chaincfg/chainhash"
+	"github.com/MetalBlockchain/dogecoin-vm/btcd/wire"
 )
 
 // TestHaveBlock tests the HaveBlock API to ensure proper functionality.

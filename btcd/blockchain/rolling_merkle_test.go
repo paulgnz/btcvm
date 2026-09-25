@@ -3,7 +3,7 @@ package blockchain
 import (
 	"testing"
 
-	"github.com/MetalBlockchain/btcvm/btcd/chaincfg/chainhash"
+	"github.com/MetalBlockchain/dogecoin-vm/btcd/chaincfg/chainhash"
 	"github.com/stretchr/testify/require"
 )
 

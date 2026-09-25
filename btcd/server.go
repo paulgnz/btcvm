@@ -23,22 +23,22 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/MetalBlockchain/btcvm/btcd/addrmgr"
-	"github.com/MetalBlockchain/btcvm/btcd/blockchain"
-	"github.com/MetalBlockchain/btcvm/btcd/blockchain/indexers"
-	"github.com/MetalBlockchain/btcvm/btcd/btcutil"
-	"github.com/MetalBlockchain/btcvm/btcd/btcutil/bloom"
-	"github.com/MetalBlockchain/btcvm/btcd/chaincfg"
-	"github.com/MetalBlockchain/btcvm/btcd/chaincfg/chainhash"
-	"github.com/MetalBlockchain/btcvm/btcd/connmgr"
-	"github.com/MetalBlockchain/btcvm/btcd/database"
-	"github.com/MetalBlockchain/btcvm/btcd/mempool"
-	"github.com/MetalBlockchain/btcvm/btcd/mining"
-	"github.com/MetalBlockchain/btcvm/btcd/mining/cpuminer"
-	"github.com/MetalBlockchain/btcvm/btcd/netsync"
-	"github.com/MetalBlockchain/btcvm/btcd/peer"
-	"github.com/MetalBlockchain/btcvm/btcd/txscript"
-	"github.com/MetalBlockchain/btcvm/btcd/wire"
+	"github.com/MetalBlockchain/dogecoin-vm/btcd/addrmgr"
+	"github.com/MetalBlockchain/dogecoin-vm/btcd/blockchain"
+	"github.com/MetalBlockchain/dogecoin-vm/btcd/blockchain/indexers"
+	"github.com/MetalBlockchain/dogecoin-vm/btcd/btcutil"
+	"github.com/MetalBlockchain/dogecoin-vm/btcd/btcutil/bloom"
+	"github.com/MetalBlockchain/dogecoin-vm/btcd/chaincfg"
+	"github.com/MetalBlockchain/dogecoin-vm/btcd/chaincfg/chainhash"
+	"github.com/MetalBlockchain/dogecoin-vm/btcd/connmgr"
+	"github.com/MetalBlockchain/dogecoin-vm/btcd/database"
+	"github.com/MetalBlockchain/dogecoin-vm/btcd/mempool"
+	"github.com/MetalBlockchain/dogecoin-vm/btcd/mining"
+	"github.com/MetalBlockchain/dogecoin-vm/btcd/mining/cpuminer"
+	"github.com/MetalBlockchain/dogecoin-vm/btcd/netsync"
+	"github.com/MetalBlockchain/dogecoin-vm/btcd/peer"
+	"github.com/MetalBlockchain/dogecoin-vm/btcd/txscript"
+	"github.com/MetalBlockchain/dogecoin-vm/btcd/wire"
 	"github.com/decred/dcrd/lru"
 )
 
@@ -2862,15 +2862,15 @@ func newServer(
 
 	txC := mempool.Config{
 		Policy: mempool.Policy{
-			DisableRelayPriority: cfg.NoRelayPriority,
-			AcceptNonStd:         cfg.RelayNonStd,
-			FreeTxRelayLimit:     cfg.FreeTxRelayLimit,
-			MaxOrphanTxs:         cfg.MaxOrphanTxs,
-			MaxOrphanTxSize:      defaultMaxOrphanTxSize,
-			MaxSigOpCostPerTx:    blockchain.MaxBlockSigOpsCost / 4,
-			MinRelayTxFee:        cfg.minRelayTxFee,
-			MaxTxVersion:         2,
-			RejectReplacement:    cfg.RejectReplacement,
+			AcceptNonStd:      cfg.RelayNonStd,
+			DustLimit:         mempool.DefaultDustLimit,
+			HardDustLimit:     mempool.DefaultHardDustLimit,
+			MaxOrphanTxs:      cfg.MaxOrphanTxs,
+			MaxOrphanTxSize:   defaultMaxOrphanTxSize,
+			MaxSigOpCostPerTx: blockchain.MaxBlockSigOpsCost / 4,
+			MinRelayTxFee:     cfg.minRelayTxFee,
+			MaxTxVersion:      2,
+			RejectReplacement: cfg.RejectReplacement,
 		},
 		ChainParams:    chainParams,
 		FetchUtxoView:  s.chain.FetchUtxoView,

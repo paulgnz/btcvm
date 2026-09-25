@@ -7,7 +7,7 @@ import (
 	"github.com/MetalBlockchain/metalgo/utils/logging"
 	"github.com/MetalBlockchain/metalgo/vms"
 
-	"github.com/MetalBlockchain/btcvm/vm"
+	"github.com/MetalBlockchain/dogecoin-vm/vm"
 )
 
 var _ vms.Factory = &Factory{}
@@ -16,6 +16,6 @@ var _ vms.Factory = &Factory{}
 type Factory struct{}
 
 // New returns a new Bitcoin VM instance
-func (f *Factory) New(_ logging.Logger) (interface{}, error) {
+func (f *Factory) New(logging.Logger) (interface{}, error) {
 	return &vm.VM{}, nil
 }

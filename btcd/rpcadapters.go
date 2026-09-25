@@ -7,13 +7,13 @@ package btcd
 import (
 	"sync/atomic"
 
-	"github.com/MetalBlockchain/btcvm/btcd/blockchain"
-	"github.com/MetalBlockchain/btcvm/btcd/btcutil"
-	"github.com/MetalBlockchain/btcvm/btcd/chaincfg/chainhash"
-	"github.com/MetalBlockchain/btcvm/btcd/mempool"
-	"github.com/MetalBlockchain/btcvm/btcd/netsync"
-	"github.com/MetalBlockchain/btcvm/btcd/peer"
-	"github.com/MetalBlockchain/btcvm/btcd/wire"
+	"github.com/MetalBlockchain/dogecoin-vm/btcd/blockchain"
+	"github.com/MetalBlockchain/dogecoin-vm/btcd/btcutil"
+	"github.com/MetalBlockchain/dogecoin-vm/btcd/chaincfg/chainhash"
+	"github.com/MetalBlockchain/dogecoin-vm/btcd/mempool"
+	"github.com/MetalBlockchain/dogecoin-vm/btcd/netsync"
+	"github.com/MetalBlockchain/dogecoin-vm/btcd/peer"
+	"github.com/MetalBlockchain/dogecoin-vm/btcd/wire"
 )
 
 // rpcPeer provides a peer for use with the RPC server and implements the

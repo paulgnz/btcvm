@@ -7,7 +7,7 @@ package workmath
 import (
 	"math/big"
 
-	"github.com/MetalBlockchain/btcvm/btcd/chaincfg/chainhash"
+	"github.com/MetalBlockchain/dogecoin-vm/btcd/chaincfg/chainhash"
 )
 
 var (

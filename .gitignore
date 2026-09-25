@@ -20,6 +20,9 @@ telegram-token
 telegram-chat
 rpc-password
 secrets/
-
 update-key*
 *sparkle*key*
+# Local builds
+/cmd/dogevm/dogevm
+/dogevm
+/dogevm-plugin

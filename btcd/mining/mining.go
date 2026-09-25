@@ -10,12 +10,12 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/MetalBlockchain/btcvm/btcd/blockchain"
-	"github.com/MetalBlockchain/btcvm/btcd/btcutil"
-	"github.com/MetalBlockchain/btcvm/btcd/chaincfg"
-	"github.com/MetalBlockchain/btcvm/btcd/chaincfg/chainhash"
-	"github.com/MetalBlockchain/btcvm/btcd/txscript"
-	"github.com/MetalBlockchain/btcvm/btcd/wire"
+	"github.com/MetalBlockchain/dogecoin-vm/btcd/blockchain"
+	"github.com/MetalBlockchain/dogecoin-vm/btcd/btcutil"
+	"github.com/MetalBlockchain/dogecoin-vm/btcd/chaincfg"
+	"github.com/MetalBlockchain/dogecoin-vm/btcd/chaincfg/chainhash"
+	"github.com/MetalBlockchain/dogecoin-vm/btcd/txscript"
+	"github.com/MetalBlockchain/dogecoin-vm/btcd/wire"
 )
 
 const (
@@ -279,10 +279,18 @@ func createCoinbaseTx(params *chaincfg.Params, coinbaseScript []byte, nextBlockH
 		SignatureScript: coinbaseScript,
 		Sequence:        wire.MaxTxInSequenceNum,
 	})
+	// Output 0 pays the subsidy, and later the fees, to the block
+	// builder.
 	tx.AddTxOut(&wire.TxOut{
 		Value:    blockchain.CalcBlockSubsidy(nextBlockHeight, params),
 		PkScript: pkScript,
 	})
+	if reserve := params.PegReserveAt(nextBlockHeight); reserve > 0 {
+		tx.AddTxOut(&wire.TxOut{
+			Value:    reserve,
+			PkScript: params.PegReserve.PkScript,
+		})
+	}
 	return btcutil.NewTx(tx), nil
 }
 

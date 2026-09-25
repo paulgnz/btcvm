@@ -7,8 +7,8 @@ package blockchain
 import (
 	"testing"
 
-	"github.com/MetalBlockchain/btcvm/btcd/btcutil"
-	"github.com/MetalBlockchain/btcvm/btcd/wire"
+	"github.com/MetalBlockchain/dogecoin-vm/btcd/btcutil"
+	"github.com/MetalBlockchain/dogecoin-vm/btcd/wire"
 )
 
 // BenchmarkIsCoinBase performs a simple benchmark against the IsCoinBase

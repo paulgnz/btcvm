@@ -9,7 +9,7 @@ import (
 	"encoding/json"
 	"testing"
 
-	"github.com/MetalBlockchain/btcvm/btcd/btcjson"
+	"github.com/MetalBlockchain/dogecoin-vm/btcd/btcjson"
 )
 
 // TestBtcdExtCustomResults ensures any results that have custom marshalling

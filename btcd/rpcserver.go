@@ -27,20 +27,20 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/MetalBlockchain/btcvm/btcd/blockchain"
-	"github.com/MetalBlockchain/btcvm/btcd/blockchain/indexers"
-	"github.com/MetalBlockchain/btcvm/btcd/btcec/v2/ecdsa"
-	"github.com/MetalBlockchain/btcvm/btcd/btcjson"
-	"github.com/MetalBlockchain/btcvm/btcd/btcutil"
-	"github.com/MetalBlockchain/btcvm/btcd/chaincfg"
-	"github.com/MetalBlockchain/btcvm/btcd/chaincfg/chainhash"
-	"github.com/MetalBlockchain/btcvm/btcd/database"
-	"github.com/MetalBlockchain/btcvm/btcd/mempool"
-	"github.com/MetalBlockchain/btcvm/btcd/mining"
-	"github.com/MetalBlockchain/btcvm/btcd/mining/cpuminer"
-	"github.com/MetalBlockchain/btcvm/btcd/peer"
-	"github.com/MetalBlockchain/btcvm/btcd/txscript"
-	"github.com/MetalBlockchain/btcvm/btcd/wire"
+	"github.com/MetalBlockchain/dogecoin-vm/btcd/blockchain"
+	"github.com/MetalBlockchain/dogecoin-vm/btcd/blockchain/indexers"
+	"github.com/MetalBlockchain/dogecoin-vm/btcd/btcec/v2/ecdsa"
+	"github.com/MetalBlockchain/dogecoin-vm/btcd/btcjson"
+	"github.com/MetalBlockchain/dogecoin-vm/btcd/btcutil"
+	"github.com/MetalBlockchain/dogecoin-vm/btcd/chaincfg"
+	"github.com/MetalBlockchain/dogecoin-vm/btcd/chaincfg/chainhash"
+	"github.com/MetalBlockchain/dogecoin-vm/btcd/database"
+	"github.com/MetalBlockchain/dogecoin-vm/btcd/mempool"
+	"github.com/MetalBlockchain/dogecoin-vm/btcd/mining"
+	"github.com/MetalBlockchain/dogecoin-vm/btcd/mining/cpuminer"
+	"github.com/MetalBlockchain/dogecoin-vm/btcd/peer"
+	"github.com/MetalBlockchain/dogecoin-vm/btcd/txscript"
+	"github.com/MetalBlockchain/dogecoin-vm/btcd/wire"
 	"github.com/btcsuite/websocket"
 )
 
@@ -286,11 +286,8 @@ var rpcLimited = map[string]struct{}{
 	"getrawmempool":         {},
 	"getrawtransaction":     {},
 	"gettxout":              {},
-	"invalidateblock":       {},
-	"reconsiderblock":       {},
 	"searchrawtransactions": {},
 	"sendrawtransaction":    {},
-	"submitblock":           {},
 	"uptime":                {},
 	"validateaddress":       {},
 	"verifymessage":         {},
@@ -4256,7 +4253,27 @@ type parsedRPCCmd struct {
 // command and runs the appropriate handler to reply to the command.  Any
 // commands which are not recognized or not implemented will return an error
 // suitable for use in replies.
+// rpcDisabledInVM are methods that would change the chain or the node
+// outside consensus. Inside DogecoinVM, blocks reach btcd only through
+// Snowman's Accept and btcd's tip must always be the last accepted block, so
+// these are refused for every user.
+var rpcDisabledInVM = map[string]struct{}{
+	"submitblock":     {},
+	"invalidateblock": {},
+	"reconsiderblock": {},
+	"generate":        {},
+	"setgenerate":     {},
+	"node":            {},
+	"stop":            {},
+}
+
 func (s *rpcServer) standardCmdResult(cmd *parsedRPCCmd, closeChan <-chan struct{}) (any, error) {
+	if _, disabled := rpcDisabledInVM[cmd.method]; disabled {
+		return nil, &btcjson.RPCError{
+			Code:    btcjson.ErrRPCMisc,
+			Message: cmd.method + " is disabled: DogecoinVM blocks are added only by consensus",
+		}
+	}
 	handler, ok := rpcHandlers[cmd.method]
 	if ok {
 		goto handled
@@ -4984,4 +5001,3 @@ func init() {
 	rpcHandlers = rpcHandlersBeforeInit
 	rand.Seed(time.Now().UnixNano())
 }
-

@@ -9,10 +9,10 @@ import (
 	"sync"
 	"time"
 
-	btcd "github.com/MetalBlockchain/btcvm/btcd"
-	"github.com/MetalBlockchain/btcvm/btcd/blockchain"
-	"github.com/MetalBlockchain/btcvm/btcd/btcutil"
-	"github.com/MetalBlockchain/btcvm/btcd/mempool"
+	btcd "github.com/MetalBlockchain/dogecoin-vm/btcd"
+	"github.com/MetalBlockchain/dogecoin-vm/btcd/blockchain"
+	"github.com/MetalBlockchain/dogecoin-vm/btcd/btcutil"
+	"github.com/MetalBlockchain/dogecoin-vm/btcd/mempool"
 	"github.com/MetalBlockchain/metalgo/database"
 	"github.com/MetalBlockchain/metalgo/ids"
 	"github.com/MetalBlockchain/metalgo/network/p2p"
@@ -35,10 +35,17 @@ var (
 )
 
 const (
-	Name = "btcvm"
-
-	validatorSetStaleness = 5 * time.Minute
+	Name = "dogecoinvm"
 )
+
+// ID is the VM ID nodes use to find this plugin: Name, zero-padded to 32
+// bytes. The plugin binary must be installed in the node's plugin directory
+// under this ID.
+var ID = func() ids.ID {
+	var id ids.ID
+	copy(id[:], Name)
+	return id
+}()
 
 var Version = &version.Semantic{
 	Major: 0,
@@ -70,10 +77,13 @@ type VM struct {
 
 	appSender common.AppSender
 
-	// Block management
-	preferred    ids.ID
-	lastAccepted ids.ID
-	blocksMu     sync.RWMutex
+	// Block management. btcd's chain tip is always lastAccepted; blocks
+	// that have been verified but not yet decided live in verifiedBlocks.
+	// See block_adapter.go.
+	preferred      ids.ID
+	lastAccepted   ids.ID
+	verifiedBlocks map[ids.ID]*BlockAdapter
+	blocksMu       sync.RWMutex
 
 	// Block building
 	buildBlockLock sync.Mutex
@@ -110,6 +120,31 @@ func parseGenesisBytes(data []byte) (*genesisBytes, error) {
 	return &genesis, nil
 }
 
+// consensusConfigKeys are genesis settings every node must agree on, which a
+// node's chain config may not override.
+var consensusConfigKeys = []string{"mainNet", "testNet", "pegReserveAddress", "pegReserveBlocks"}
+
+// applyChainConfig overlays the node's chain config (JSON with the same keys
+// as the genesis "config" object) onto the genesis config.
+func applyChainConfig(genesisConfig *btcd.Config, configBytes []byte) error {
+	if len(configBytes) == 0 {
+		return nil
+	}
+
+	var keys map[string]json.RawMessage
+	if err := json.Unmarshal(configBytes, &keys); err != nil {
+		return err
+	}
+	for _, key := range consensusConfigKeys {
+		if _, ok := keys[key]; ok {
+			return fmt.Errorf("%q is a consensus setting and must be set in the genesis", key)
+		}
+	}
+
+	// Unmarshal onto the genesis config so absent keys keep their values.
+	return json.Unmarshal(configBytes, genesisConfig)
+}
+
 // Initialize initializes the VM
 func (vm *VM) Initialize(
 	ctx context.Context,
@@ -134,6 +169,7 @@ func (vm *VM) Initialize(
 	vm.db = db
 	vm.appSender = appSender
 	vm.shutdownChan = make(chan struct{})
+	vm.verifiedBlocks = make(map[ids.ID]*BlockAdapter)
 
 	// Parse genesis to get config
 	gb, err := parseGenesisBytes(genesisBytes)
@@ -141,27 +177,18 @@ func (vm *VM) Initialize(
 		return fmt.Errorf("failed to parse genesis: %w", err)
 	}
 
+	// Node-local settings (RPC credentials, indexes, data paths) come from
+	// the chain config, which unlike the genesis is private to the node.
+	if err := applyChainConfig(&gb.Config, configBytes); err != nil {
+		return fmt.Errorf("failed to parse chain config: %w", err)
+	}
+
 	config, _, err := btcd.LoadConfig(vm.ctx.NodeID.String(), &gb.Config)
 	if err != nil {
 		return fmt.Errorf("failed to parse config: %w", err)
 	}
 
-	// Layer the per-node chain config (configBytes, sourced by avalanchego from
-	// {chain-config-dir}/<chainID>/config.json) over the genesis-derived config.
-	// Genesis is hashed into the chain ID and so cannot carry per-node tunables;
-	// configBytes lets each node override settings such as rpcMaxClients,
-	// rpcMaxConcurrentReqs, and rpcMaxWebsockets with only a restart. Non-zero
-	// fields in the override win; unset fields keep their genesis/default value.
-	if len(configBytes) > 0 {
-		var nodeOverride btcd.Config
-		if err := json.Unmarshal(configBytes, &nodeOverride); err != nil {
-			return fmt.Errorf("failed to parse per-node config bytes: %w", err)
-		}
-		btcd.MergeConfig(config, &nodeOverride)
-	}
-
-	// Disable legacy networking. These are forced after the per-node merge so
-	// configBytes can never re-enable listening, DNS seeding, or peering.
+	// Disable legacy networking
 	config.DisableListen = true
 	config.DisableDNSSeed = true
 	config.MaxPeers = 0
@@ -196,17 +223,14 @@ func (vm *VM) Initialize(
 	vm.btcdAdapter.SetOnTxAccepted(vm.blockBuilder.onTxAccepted)
 	vm.btcdAdapter.Start()
 
-	// Initialize p2p network (validators track connections for gossip peer sampling)
+	// Initialize p2p network. The validator set tracks connected
+	// validators for stake-weighted gossip, so it is registered as a
+	// connection handler.
 	vm.ctx.Log.Info("Initializing p2p network")
-	if vm.ctx.ValidatorState == nil {
-		return fmt.Errorf("validator state not initialized")
+	vm.p2pValidators, err = vm.InitializeValidators()
+	if err != nil {
+		return fmt.Errorf("failed to initialize validators: %w", err)
 	}
-	vm.p2pValidators = p2p.NewValidators(
-		vm.ctx.Log,
-		vm.ctx.SubnetID,
-		vm.ctx.ValidatorState,
-		validatorSetStaleness,
-	)
 	reg := prometheus.NewRegistry()
 	p2pNet, err := p2p.NewNetwork(vm.ctx.Log, appSender, reg, "p2p", vm.p2pValidators)
 	if err != nil {
@@ -222,7 +246,8 @@ func (vm *VM) Initialize(
 	vm.chain = vm.btcdAdapter.Chain()
 	vm.ctx.Log.Info("btcd adapter initialized successfully")
 
-	// Get the latest block from the chain and set it as lastAccepted
+	// btcd only ever connects accepted blocks (see block_adapter.go), so its
+	// tip is the last accepted block.
 	bestSnapshot := vm.chain.BestSnapshot()
 	if bestSnapshot != nil {
 		// Convert btcd hash to Metal ID
@@ -250,33 +275,9 @@ func (vm *VM) Initialize(
 		}
 	}
 
-	// Set the callback for relaying blocks via unified gossip
-	vm.btcdAdapter.OnBlockRelay = func(block *btcutil.Block) {
-		// Run gossip asynchronously to avoid blocking block processing
-		go func(b *btcutil.Block) {
-			// Use unified gossip if available
-			if vm.pushGossiper != nil {
-				item := NewBlockGossip(b)
-
-				// Check if we already gossiped this block to avoid continuous re-gossip
-				// The bloom filter tracks blocks we've seen/gossiped
-				if vm.btcSet != nil && vm.btcSet.bloom != nil {
-					if vm.btcSet.bloom.Has(item) {
-						vm.ctx.Log.Debug("Skipping block gossip - already in bloom filter",
-							zap.String("hash", b.Hash().String()),
-							zap.Int32("height", b.Height()),
-						)
-						return
-					}
-				}
-
-				vm.pushGossiper.Add(item)
-				vm.ctx.Log.Info("Gossiped block via unified gossip",
-					zap.String("hash", b.Hash().String()),
-					zap.Int32("height", b.Height()))
-			}
-		}(block)
-	}
+	// Blocks propagate through Snowman (PushQuery/Put/GetAncestors), never
+	// through gossip: a gossiped block would reach btcd without a vote.
+	vm.btcdAdapter.OnBlockRelay = func(*btcutil.Block) {}
 
 	vm.initialized = true
 
@@ -430,13 +431,27 @@ func (vm *VM) Shutdown(ctx context.Context) error {
 	vm.ctx.Log.Info("Waiting for gossip goroutines to finish")
 	vm.shutdownWg.Wait()
 
+	// Flush btcd's state and release its database now that nothing else can
+	// touch the chain.
+	if vm.btcdAdapter != nil {
+		if err := vm.btcdAdapter.Close(); err != nil {
+			vm.ctx.Log.Error("Error closing btcd database", zap.Error(err))
+		}
+	}
+
 	vm.stopped = true
 
 	vm.ctx.Log.Info("Bitcoin VM shutdown complete")
 	return nil
 }
 
-// BuildBlock builds a new block
+// errBlockProcessing is returned by BuildBlock while a verified block is
+// waiting to be decided. Blocks can only build on the last accepted block, so
+// building now would only create a competing sibling.
+var errBlockProcessing = errors.New("a verified block is still being decided")
+
+// BuildBlock builds a new block on top of the last accepted block. The block
+// is not written to btcd until it is accepted.
 func (vm *VM) BuildBlock(ctx context.Context) (snowman.Block, error) {
 	vm.ctx.Log.Info("BuildBlock called by Snowman engine")
 
@@ -445,6 +460,10 @@ func (vm *VM) BuildBlock(ctx context.Context) (snowman.Block, error) {
 
 	if vm.btcdAdapter == nil {
 		return nil, fmt.Errorf("btcd adapter not initialized")
+	}
+
+	if vm.hasProcessingBlocks() {
+		return nil, errBlockProcessing
 	}
 
 	// Get current block to track parent
@@ -482,19 +501,16 @@ func (vm *VM) BuildBlock(ctx context.Context) (snowman.Block, error) {
 
 	template.Block.Header.Nonce = 0
 	block := btcutil.NewBlock(template.Block)
+	block.SetHeight(template.Height)
 
-	isMainChain, isOrphan, err := vm.btcdAdapter.ProcessBlockNoPoW(block)
-	if err != nil {
-		return nil, fmt.Errorf("failed to process block: %w", err)
-	}
-
-	if isOrphan {
-		return nil, fmt.Errorf("generated block is orphan (parent missing)")
-	}
-
-	blockAdapter, err := NewBlockAdapter(vm, block)
+	blockAdapter, err := newBlockAdapter(vm, block)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create block adapter: %w", err)
+	}
+
+	if blockAdapter.Parent() != vm.LastAcceptedID() {
+		return nil, fmt.Errorf("block template built on %s, not the last accepted block",
+			blockAdapter.Parent())
 	}
 
 	if vm.blockBuilder != nil {
@@ -504,58 +520,79 @@ func (vm *VM) BuildBlock(ctx context.Context) (snowman.Block, error) {
 	vm.ctx.Log.Info("Built block",
 		zap.String("id", blockAdapter.ID().String()),
 		zap.Uint64("height", blockAdapter.Height()),
-		zap.Int("txs", len(block.Transactions())-1),
-		zap.Bool("mainChain", isMainChain))
+		zap.Int("txs", len(block.Transactions())-1))
 
 	return blockAdapter, nil
 }
 
-// ParseBlock parses a block from bytes
+// ParseBlock parses a block from bytes. It does not validate or store it.
 func (vm *VM) ParseBlock(ctx context.Context, blockBytes []byte) (snowman.Block, error) {
 	if !vm.initialized {
 		return nil, errNotInitialized
 	}
 
-	// Create block adapter from the serialized bytes
-	blockAdapter, err := NewBlockAdapterFromBytes(vm, blockBytes)
+	blockAdapter, err := parseBlockAdapter(vm, blockBytes)
 	if err != nil {
 		return nil, fmt.Errorf("failed to parse block: %w", err)
 	}
 
-	vm.ctx.Log.Info("Successfully parsed block",
+	// Return the existing instance for a block that is already verified or
+	// accepted, so the engine sees one object per block ID.
+	if known, err := vm.getBlock(blockAdapter.ID()); err == nil {
+		return known, nil
+	}
+
+	vm.ctx.Log.Debug("Parsed block",
 		zap.String("blockID", blockAdapter.ID().String()),
 		zap.Uint64("height", blockAdapter.Height()),
 	)
 	return blockAdapter, nil
 }
 
-// GetBlock returns a block by ID
+// GetBlock returns a verified or accepted block by ID, or database.ErrNotFound.
 func (vm *VM) GetBlock(ctx context.Context, blockID ids.ID) (snowman.Block, error) {
 	if !vm.initialized {
 		return nil, errNotInitialized
 	}
 	vm.ctx.Log.Debug("getting block", zap.String("id", blockID.String()))
 
-	block, err := vm.getBlock(blockID)
-	if err != nil {
-		vm.ctx.Log.Error("failed to get block",
-			zap.String("id", blockID.String()),
-			zap.Error(err))
-		return nil, err
-	}
-
-	return block, nil
+	return vm.getBlock(blockID)
 }
 
-// getBlock returns a block by ID (internal)
-func (vm *VM) getBlock(blockID ids.ID) (snowman.Block, error) {
-	// Use the block adapter to fetch and wrap the Bitcoin block
-	blockAdapter, err := NewBlockAdapterFromID(vm, blockID)
-	if err != nil {
-		return nil, fmt.Errorf("failed to get block adapter: %w", err)
+// getBlock returns a verified or accepted block by ID (internal)
+func (vm *VM) getBlock(blockID ids.ID) (*BlockAdapter, error) {
+	vm.blocksMu.RLock()
+	blk, ok := vm.verifiedBlocks[blockID]
+	vm.blocksMu.RUnlock()
+	if ok {
+		return blk, nil
 	}
 
-	return blockAdapter, nil
+	return acceptedBlockAdapter(vm, blockID)
+}
+
+// hasProcessingBlocks reports whether any verified block is waiting to be
+// accepted or rejected.
+func (vm *VM) hasProcessingBlocks() bool {
+	vm.blocksMu.RLock()
+	defer vm.blocksMu.RUnlock()
+	return len(vm.verifiedBlocks) > 0
+}
+
+// LastAcceptedID returns the last accepted block ID.
+func (vm *VM) LastAcceptedID() ids.ID {
+	vm.blocksMu.RLock()
+	defer vm.blocksMu.RUnlock()
+	return vm.lastAccepted
+}
+
+// onBlockDecided wakes the block builder once no block is left to decide, so
+// transactions that were not in the decided block get built into the next
+// one. It must not be called with blocksMu held.
+func (vm *VM) onBlockDecided() {
+	if vm.blockBuilder != nil && vm.blockBuilder.needToBuild() {
+		vm.blockBuilder.signalCanBuild()
+	}
 }
 
 // getCurrentBlock returns the current best block from the blockchain
@@ -574,7 +611,9 @@ func (vm *VM) SetPreference(ctx context.Context, blockID ids.ID) error {
 		return errNotInitialized
 	}
 
+	vm.blocksMu.Lock()
 	vm.preferred = blockID
+	vm.blocksMu.Unlock()
 	vm.ctx.Log.Debug("set preference", zap.String("id", blockID.String()))
 	return nil
 }
@@ -585,7 +624,7 @@ func (vm *VM) LastAccepted(ctx context.Context) (ids.ID, error) {
 		return ids.Empty, errNotInitialized
 	}
 
-	return vm.lastAccepted, nil
+	return vm.LastAcceptedID(), nil
 }
 
 // GetBlockIDAtHeight returns the block ID at a given height
@@ -625,7 +664,7 @@ func (vm *VM) HealthCheck(ctx context.Context) (interface{}, error) {
 
 	return map[string]interface{}{
 		"initialized":  vm.initialized,
-		"lastAccepted": vm.lastAccepted.String(),
+		"lastAccepted": vm.LastAcceptedID().String(),
 	}, nil
 }
 
@@ -646,8 +685,7 @@ func (vm *VM) AppRequest(
 	deadline time.Time,
 	msgBytes []byte,
 ) error {
-	// Not implemented yet
-	return nil
+	return vm.p2pNetwork.AppRequest(ctx, nodeID, requestID, deadline, msgBytes)
 }
 
 // AppRequestFailed handles failed app requests
@@ -657,50 +695,28 @@ func (vm *VM) AppRequestFailed(
 	requestID uint32,
 	appErr *common.AppError,
 ) error {
-	// Log the failure
-	return nil
+	return vm.p2pNetwork.AppRequestFailed(ctx, nodeID, requestID, appErr)
 }
 
 // AppResponse handles responses to app requests
 func (vm *VM) AppResponse(ctx context.Context, nodeID ids.NodeID, requestID uint32, msgBytes []byte) error {
-	// Not implemented yet
-	return nil
+	return vm.p2pNetwork.AppResponse(ctx, nodeID, requestID, msgBytes)
 }
 
-// Connected is called when a new connection is established
+// Connected is called when a new connection is established. The p2p network
+// tracks peers for gossip, so it must hear about every connection.
 func (vm *VM) Connected(ctx context.Context, nodeID ids.NodeID, nodeVersion *version.Application) error {
-	return nil
+	return vm.p2pNetwork.Connected(ctx, nodeID, nodeVersion)
 }
 
 // Disconnected is called when a connection is terminated
 func (vm *VM) Disconnected(ctx context.Context, nodeID ids.NodeID) error {
-	return nil
+	return vm.p2pNetwork.Disconnected(ctx, nodeID)
 }
 
-// CrossChainAppRequest handles incoming cross-chain app requests
-func (vm *VM) CrossChainAppRequest(
-	ctx context.Context,
-	chainID ids.ID,
-	requestID uint32,
-	deadline time.Time,
-	msgBytes []byte,
-) error {
-	return errors.New("cross-chain requests not supported")
-}
-
-// CrossChainAppRequestFailed handles failed cross-chain app requests
-func (vm *VM) CrossChainAppRequestFailed(
-	ctx context.Context,
-	chainID ids.ID,
-	requestID uint32,
-	appErr *common.AppError,
-) error {
-	return nil
-}
-
-// CrossChainAppResponse handles responses to cross-chain app requests
-func (vm *VM) CrossChainAppResponse(ctx context.Context, chainID ids.ID, requestID uint32, msgBytes []byte) error {
-	return nil
+// NewHTTPHandler returns nil: the VM serves no gRPC-routed HTTP handler.
+func (vm *VM) NewHTTPHandler(context.Context) (http.Handler, error) {
+	return nil, nil
 }
 
 // CreateHandlers creates and returns HTTP handlers
@@ -729,9 +745,4 @@ func (vm *VM) CreateHandlers(context.Context) (map[string]http.Handler, error) {
 		"/rpc": rpcHandler,
 		"/ws":  wsHandler,
 	}, nil
-}
-
-// NewHTTPHandler implements common.VM for routing on the node HTTP server when requested via chain header.
-func (*VM) NewHTTPHandler(context.Context) (http.Handler, error) {
-	return http.NewServeMux(), nil
 }

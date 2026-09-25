@@ -1,0 +1,53 @@
+{{define "head"}}
+  <script type="module" src="download.js"></script>
+{{end}}
+{{define "main"}}
+  <main class="page">
+    <div class="download-hero">
+      <img src="icon-512.png" alt="" width="112" height="112">
+      <div>
+        <h1>DogecoinVM Wallet for Mac</h1>
+        <p class="lede">One key for Dogecoin and DogecoinVM, and the bridge between them, with Touch ID for every payment.</p>
+      </div>
+    </div>
+
+    <p><a class="button-link" href="/download/macos/DogecoinVM-Wallet.dmg">Download for Mac</a></p>
+
+    <dl class="facts-list">
+      <dt>Version</dt><dd id="dl-version">…</dd>
+      <dt>Released</dt><dd id="dl-date">…</dd>
+      <dt>Size</dt><dd id="dl-size">…</dd>
+      <dt>Requires</dt><dd>macOS 14 Sonoma or later, on a Mac with Apple silicon or an Intel Mac with a T2 chip</dd>
+      <dt>Signed</dt><dd>With a Developer ID (Paul Grey, UKU2H2D5Z7), and notarized by Apple: it opens with no warnings</dd>
+      <dt>Source</dt><dd>Open source, MIT licensed: <a href="https://github.com/paulgnz/dogecoin-vm-wallet">github.com/paulgnz/dogecoin-vm-wallet</a></dd>
+      <dt>SHA-256</dt><dd class="sha" id="dl-sha">…</dd>
+    </dl>
+
+    <h2>What it does</h2>
+    <ul>
+      <li><strong>Both networks, one key.</strong> Your key has the same address on Dogecoin and on DogecoinVM, and the app shows both balances side by side.</li>
+      <li><strong>Review before you sign.</strong> Every payment is shown line by line (who's paid, change back to you, a withdrawal's destination, the fee) before Touch ID signs it. The app then checks the signed transaction says exactly that before sending it.</li>
+      <li><strong>Move between chains in one step.</strong> Move DOGE from your Dogecoin balance to DogecoinVM, and withdraw back to your own Dogecoin address.</li>
+      <li><strong>Your key stays on your Mac,</strong> encrypted to its Secure Enclave, so the file is useless on any other computer.</li>
+      <li><strong>Notifications</strong> when a deposit is credited or a withdrawal is paid.</li>
+      <li><strong>Automatic updates,</strong> installed only if they're signed with the release key.</li>
+    </ul>
+
+    <h2>Install</h2>
+    <ol>
+      <li>Open the downloaded <code>DogecoinVM-Wallet.dmg</code>.</li>
+      <li>Drag <strong>DogecoinVM Wallet</strong> into Applications.</li>
+      <li>Open it, then create a wallet or import the key you use on this site.</li>
+    </ol>
+    <p>Prefer the browser? The <a href="/">bridge page</a> is a full wallet too, and imports the same key.</p>
+
+    <h2>Check what you're running</h2>
+    <p>The app is open source. Each <a href="https://github.com/paulgnz/dogecoin-vm-wallet/releases">release on GitHub</a> is tagged at the code it was built from and carries this same DMG, so you can match the download to its source. To check the copy on your Mac, run these in Terminal:</p>
+    <pre>shasum -a 256 ~/Downloads/DogecoinVM-Wallet.dmg
+codesign -dv "/Applications/DogecoinVM Wallet.app" 2>&amp;1 | grep -E "Authority=Developer|TeamIdentifier"
+spctl -a -vv "/Applications/DogecoinVM Wallet.app"</pre>
+    <p>The checksum should match the SHA-256 above, the signer should be Paul Grey (UKU2H2D5Z7), and <code>spctl</code> should say it's notarized. An antivirus alert about another Dogecoin app on your Mac, such as Dogecoin-Qt, isn't about this one.</p>
+
+    <div class="callout"><p><strong>Beta.</strong> The app works with real DOGE and the bridge's beta limits. Keep amounts small, and back up your key from the app's Settings.</p></div>
+  </main>
+{{end}}

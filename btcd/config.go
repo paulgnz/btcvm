@@ -22,16 +22,16 @@ import (
 	"strings"
 	"time"
 
-	"github.com/MetalBlockchain/btcvm/btcd/blockchain"
-	"github.com/MetalBlockchain/btcvm/btcd/btcutil"
-	"github.com/MetalBlockchain/btcvm/btcd/chaincfg"
-	"github.com/MetalBlockchain/btcvm/btcd/chaincfg/chainhash"
-	"github.com/MetalBlockchain/btcvm/btcd/connmgr"
-	"github.com/MetalBlockchain/btcvm/btcd/database"
-	_ "github.com/MetalBlockchain/btcvm/btcd/database/ffldb"
-	"github.com/MetalBlockchain/btcvm/btcd/mempool"
-	"github.com/MetalBlockchain/btcvm/btcd/peer"
-	"github.com/MetalBlockchain/btcvm/btcd/wire"
+	"github.com/MetalBlockchain/dogecoin-vm/btcd/blockchain"
+	"github.com/MetalBlockchain/dogecoin-vm/btcd/btcutil"
+	"github.com/MetalBlockchain/dogecoin-vm/btcd/chaincfg"
+	"github.com/MetalBlockchain/dogecoin-vm/btcd/chaincfg/chainhash"
+	"github.com/MetalBlockchain/dogecoin-vm/btcd/connmgr"
+	"github.com/MetalBlockchain/dogecoin-vm/btcd/database"
+	_ "github.com/MetalBlockchain/dogecoin-vm/btcd/database/ffldb"
+	"github.com/MetalBlockchain/dogecoin-vm/btcd/mempool"
+	"github.com/MetalBlockchain/dogecoin-vm/btcd/peer"
+	"github.com/MetalBlockchain/dogecoin-vm/btcd/wire"
 	"github.com/btcsuite/go-socks/socks"
 	flags "github.com/jessevdk/go-flags"
 )
@@ -46,11 +46,10 @@ const (
 	defaultBanDuration           = time.Hour * 24
 	defaultBanThreshold          = 100
 	defaultConnectTimeout        = time.Second * 30
-	defaultMaxRPCClients         = 100
-	defaultMaxRPCWebsockets      = 100
-	defaultMaxRPCConcurrentReqs  = 100
+	defaultMaxRPCClients         = 10
+	defaultMaxRPCWebsockets      = 25
+	defaultMaxRPCConcurrentReqs  = 20
 	defaultDbType                = "ffldb"
-	defaultFreeTxRelayLimit      = 15.0
 	defaultTrickleInterval       = peer.DefaultTrickleInterval
 	defaultBlockMinSize          = 0
 	defaultBlockMaxSize          = 750000
@@ -127,13 +126,12 @@ type Config struct {
 	DropTxIndex          bool          `json:"dropTxIndex"          long:"droptxindex"          description:"Deletes the hash-based transaction index from the database on start up and then exits."`
 	ExternalIPs          []string      `json:"externalIPs"          long:"externalip"           description:"Add an ip to the list of local addresses we claim to listen on to peers"`
 	Generate             bool          `json:"generate"             long:"generate"             description:"Generate (mine) bitcoins using the CPU"`
-	FreeTxRelayLimit     float64       `json:"freeTxRelayLimit"     long:"limitfreerelay"       description:"Limit relay of transactions with no transaction fee to the given amount in thousands of bytes per minute"`
 	Listeners            []string      `json:"listeners"            long:"listen"               description:"Add an interface/port to listen for connections (default all interfaces port: 8333, testnet: 18333)"`
 	LogDir               string        `json:"logDir"               long:"logdir"               description:"Directory to log output."`
 	MaxOrphanTxs         int           `json:"maxOrphanTxs"         long:"maxorphantx"          description:"Max number of orphan transactions to keep in memory"`
 	MaxPeers             int           `json:"maxPeers"             long:"maxpeers"             description:"Max number of inbound and outbound peers"`
 	MiningAddrs          []string      `json:"miningAddrs"          long:"miningaddr"           description:"Add the specified payment address to the list of addresses to use for generated blocks -- At least one address is required if the generate option is set"`
-	MinRelayTxFee        float64       `json:"minRelayTxFee"        long:"minrelaytxfee"        description:"The minimum transaction fee in BTC/kB to be considered a non-zero fee."`
+	MinRelayTxFee        float64       `json:"minRelayTxFee"        long:"minrelaytxfee"        description:"The minimum transaction fee rate in DOGE/kB every relayed transaction must pay"`
 	DisableBanning       bool          `json:"disableBanning"       long:"nobanning"            description:"Disable banning of misbehaving peers"`
 	NoCFilters           bool          `json:"noCFilters"           long:"nocfilters"           description:"Disable committed filtering (CF) support"`
 	DisableCheckpoints   bool          `json:"disableCheckpoints"   long:"nocheckpoints"        description:"Disable built-in checkpoints.  Don't do this unless you know what you're doing."`
@@ -141,7 +139,6 @@ type Config struct {
 	DisableListen        bool          `json:"disableListen"        long:"nolisten"             description:"Disable listening for incoming connections -- NOTE: Listening is automatically disabled if the --connect or --proxy options are used without also specifying listen interfaces via --listen"`
 	NoOnion              bool          `json:"noOnion"              long:"noonion"              description:"Disable connecting to tor hidden services"`
 	NoPeerBloomFilters   bool          `json:"noPeerBloomFilters"   long:"nopeerbloomfilters"   description:"Disable bloom filtering support"`
-	NoRelayPriority      bool          `json:"noRelayPriority"      long:"norelaypriority"      description:"Do not require free or low-fee transactions to have high priority for relaying"`
 	NoWinService         bool          `json:"noWinService"         long:"nowinservice"         description:"Do not start as a background service on Windows -- NOTE: This flag only works on the command line, not in the config file"`
 	DisableRPC           bool          `json:"disableRPC"           long:"norpc"                description:"Disable built-in RPC server -- NOTE: The RPC server is disabled by default if no rpcuser/rpcpass or rpclimituser/rpclimitpass is specified"`
 	DisableStallHandler  bool          `json:"disableStallHandler"  long:"nostalldetect"        description:"Disables the stall handler system for each peer, useful in simnet/regtest integration tests frameworks"`
@@ -174,6 +171,9 @@ type Config struct {
 	SigNet               bool          `json:"sigNet"               long:"signet"               description:"Use the signet test network"`
 	SigNetChallenge      string        `json:"sigNetChallenge"      long:"signetchallenge"      description:"Connect to a custom signet network defined by this challenge instead of using the global default signet network -- Can be specified multiple times"`
 	SigNetSeedNode       []string      `json:"sigNetSeedNode"       long:"signetseednode"       description:"Specify a seed node for the signet network instead of using the global default signet network seed nodes"`
+	MainNet              bool          `json:"mainNet"              long:"mainnet"              description:"Use the DogecoinVM main network (default is testnet)"`
+	PegReserveAddress    string        `json:"pegReserveAddress"    long:"pegreserveaddress"    description:"Address the peg reserve is locked to (normally a P2SH multisig of the peg signers); empty disables the reserve"`
+	PegReserveBlocks     int32         `json:"pegReserveBlocks"     long:"pegreserveblocks"     description:"Number of blocks, from height 1, whose coinbase each pays 9,000,000,000 DOGE into the peg reserve"`
 	TestNet              bool          `json:"testNet"              long:"testnet"              description:"Use the test network"`
 	TorIsolation         bool          `json:"torIsolation"         long:"torisolation"         description:"Enable Tor stream isolation by randomizing user credentials for each connection."`
 	TrickleInterval      time.Duration `json:"trickleInterval"      long:"trickleinterval"      description:"Minimum time between attempts to send new inventory to a connected peer"`
@@ -402,14 +402,6 @@ func newConfigParser(cfg *Config, so *serviceOptions, options flags.Options) *fl
 	return parser
 }
 
-// MergeConfig merges non-zero values from override into base config. It is the
-// exported entry point used to layer a per-node config (e.g. avalanchego's
-// chain config bytes) on top of an already-loaded config without disturbing any
-// field the override leaves unset.
-func MergeConfig(base *Config, override *Config) {
-	mergeConfigs(base, override)
-}
-
 // mergeConfigs merges non-zero values from override into base config using reflection
 func mergeConfigs(base *Config, override *Config) {
 	if override == nil {
@@ -483,7 +475,6 @@ func LoadConfig(nodeId string, overrideCfg *Config) (*Config, []string, error) {
 		RPCKey:               defaultRPCKeyFile,
 		RPCCert:              defaultRPCCertFile,
 		MinRelayTxFee:        mempool.DefaultMinRelayTxFee.ToBTC(),
-		FreeTxRelayLimit:     defaultFreeTxRelayLimit,
 		TrickleInterval:      defaultTrickleInterval,
 		BlockMinSize:         defaultBlockMinSize,
 		BlockMaxSize:         defaultBlockMaxSize,
@@ -546,14 +537,9 @@ func LoadConfig(nodeId string, overrideCfg *Config) (*Config, []string, error) {
 	if !(preCfg.RegressionTest || preCfg.SimNet || preCfg.SigNet) ||
 		preCfg.ConfigFile != defaultConfigFile {
 
-		if _, err := os.Stat(preCfg.ConfigFile); os.IsNotExist(err) {
-			err := createDefaultConfigFile(preCfg.ConfigFile)
-			if err != nil {
-				fmt.Fprintf(os.Stderr, "Error creating a "+
-					"default config file: %v\n", err)
-			}
-		}
-
+		// Inside the VM, settings come from the genesis and chain config;
+		// a btcd config file is only read if one exists. btcd would
+		// otherwise copy its sample config next to the plugin binary.
 		err := flags.NewIniParser(parser).ParseFile(preCfg.ConfigFile)
 		if err != nil {
 			if _, ok := err.(*os.PathError); !ok {
@@ -602,25 +588,41 @@ func LoadConfig(nodeId string, overrideCfg *Config) (*Config, []string, error) {
 
 	// Multiple networks can't be selected simultaneously.
 	numNets := 0
-	// Select Metal btcvm network: testnet (wire.TestNet3) vs default localnet
-	// (wire.SimNet / BtcvmLocalNetParms). Always set cfg.ChainParams — it was
-	// previously only set when testNet was true, leaving nil and panicking VM init.
+	// Count number of network flags passed; assign active network params
+	// while we're at it. Start from the default so a previous LoadConfig
+	// in this process cannot leak its choice.
+	activeNetParams = &dogecoinVMTestNetParams
+	if cfg.MainNet {
+		numNets++
+		activeNetParams = &dogecoinVMMainNetParams
+	}
 	if cfg.TestNet {
 		numNets++
-		activeNetParams = &btcVMTestNetParms
-	} else {
-		activeNetParams = &btcVMLocalNetParms
+		activeNetParams = &dogecoinVMTestNetParams
 	}
 	cfg.ChainParams = activeNetParams.Params
 
 	if numNets > 1 {
-		str := "%s: The testnet, regtest, segnet, signet and simnet " +
-			"params can't be used together -- choose one of the " +
-			"five"
+		str := "%s: The mainnet and testnet params can't be used " +
+			"together -- choose one"
 		err := fmt.Errorf(str, funcName)
 		fmt.Fprintln(os.Stderr, err)
 		fmt.Fprintln(os.Stderr, usageMessage)
 		return nil, nil, err
+	}
+
+	// The peg reserve is part of consensus, set per chain in its genesis
+	// config. Apply it to a copy so the package-level params stay intact.
+	if cfg.PegReserveAddress != "" || cfg.PegReserveBlocks != 0 {
+		withReserve, err := withPegReserve(activeNetParams,
+			cfg.PegReserveAddress, cfg.PegReserveBlocks)
+		if err != nil {
+			err := fmt.Errorf("%s: %w", funcName, err)
+			fmt.Fprintln(os.Stderr, err)
+			return nil, nil, err
+		}
+		activeNetParams = withReserve
+		cfg.ChainParams = activeNetParams.Params
 	}
 
 	// If mainnet is active, then we won't allow the stall handler to be

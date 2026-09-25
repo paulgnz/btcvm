@@ -12,13 +12,13 @@ import (
 	"testing"
 	"time"
 
-	"github.com/MetalBlockchain/btcvm/btcd/blockchain"
-	"github.com/MetalBlockchain/btcvm/btcd/btcec/v2"
-	"github.com/MetalBlockchain/btcvm/btcd/btcutil"
-	"github.com/MetalBlockchain/btcvm/btcd/chaincfg"
-	"github.com/MetalBlockchain/btcvm/btcd/chaincfg/chainhash"
-	"github.com/MetalBlockchain/btcvm/btcd/txscript"
-	"github.com/MetalBlockchain/btcvm/btcd/wire"
+	"github.com/MetalBlockchain/dogecoin-vm/btcd/blockchain"
+	"github.com/MetalBlockchain/dogecoin-vm/btcd/btcec/v2"
+	"github.com/MetalBlockchain/dogecoin-vm/btcd/btcutil"
+	"github.com/MetalBlockchain/dogecoin-vm/btcd/chaincfg"
+	"github.com/MetalBlockchain/dogecoin-vm/btcd/chaincfg/chainhash"
+	"github.com/MetalBlockchain/dogecoin-vm/btcd/txscript"
+	"github.com/MetalBlockchain/dogecoin-vm/btcd/wire"
 )
 
 // fakeChain is used by the pool harness to provide generated test utxos and
@@ -317,13 +317,11 @@ func newPoolHarness(chainParams *chaincfg.Params) (*poolHarness, []spendableOutp
 		chain: chain,
 		txPool: New(&Config{
 			Policy: Policy{
-				DisableRelayPriority: true,
-				FreeTxRelayLimit:     15.0,
-				MaxOrphanTxs:         5,
-				MaxOrphanTxSize:      1000,
-				MaxSigOpCostPerTx:    blockchain.MaxBlockSigOpsCost / 4,
-				MinRelayTxFee:        1000, // 1 Satoshi per byte
-				MaxTxVersion:         1,
+				MaxOrphanTxs:      5,
+				MaxOrphanTxSize:   1000,
+				MaxSigOpCostPerTx: blockchain.MaxBlockSigOpsCost / 4,
+				MinRelayTxFee:     0, // fee policy is covered by TestDogecoinRelayFee
+				MaxTxVersion:      1,
 			},
 			ChainParams:      chainParams,
 			FetchUtxoView:    chain.FetchUtxoView,
@@ -1800,11 +1798,6 @@ func TestRBF(t *testing.T) {
 			if err != nil {
 				t.Fatalf("unable to create test pool: %v", err)
 			}
-
-			// We'll enable relay priority to ensure we can properly
-			// test fees between replacement transactions and the
-			// transactions it replaces.
-			harness.txPool.cfg.Policy.DisableRelayPriority = false
 
 			// Each test includes a setup method, which will set up
 			// its required dependencies. The transaction returned
