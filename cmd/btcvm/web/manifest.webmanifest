@@ -1,7 +1,7 @@
 {
-  "name": "DogecoinVM Wallet",
-  "short_name": "DogecoinVM",
-  "description": "One key, two networks: DOGE on Dogecoin and on DogecoinVM, and the bridge between them.",
+  "name": "BTCVM Wallet",
+  "short_name": "BTCVM",
+  "description": "One key, two networks: BTC on Bitcoin and on BTCVM, and the bridge between them.",
   "id": "/",
   "start_url": "/",
   "scope": "/",

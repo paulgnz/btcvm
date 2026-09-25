@@ -120,10 +120,11 @@ func (h *healthChecker) bitcoinNode() check {
 	if err := rpc.call(&header, "getblockheader", info.BestBlockHash); err != nil {
 		return check{"bitcoin", false, err.Error()}
 	}
-	// Bitcoin targets a block a minute; half an hour without one means
-	// the node has fallen behind.
+	// Bitcoin targets a block every 10 minutes, at random: an hour without
+	// one happens about once a week, 90 minutes about once a year, so past
+	// that the node has most likely fallen behind.
 	age := time.Since(time.Unix(header.Time, 0)).Round(time.Second)
-	if age > 30*time.Minute {
+	if age > 90*time.Minute {
 		return check{"bitcoin", false, fmt.Sprintf("latest block %d is %s old", info.Blocks, age)}
 	}
 	return check{"bitcoin", true, fmt.Sprintf("block %d, %s old", info.Blocks, age)}

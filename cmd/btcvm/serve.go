@@ -379,9 +379,10 @@ type btcSupply struct {
 	Height int64  `json:"height"`
 }
 
-// watchSupply reads Bitcoin's supply from the node's UTXO set once an hour,
-// once the node has caught up; before that the figure would be for the past.
-// Summing the UTXO set takes minutes, so it gets its own long timeout.
+// watchSupply reads Bitcoin's supply from the node's UTXO set every six
+// hours, once the node has caught up; before that the figure would be for
+// the past. Summing Bitcoin's UTXO set takes minutes, so it gets its own
+// long timeout, and skips the set's hash, which it does not need.
 func (srv *server) watchSupply() {
 	d := srv.btc.rpc
 	rpc := newRPCClient(d.url, d.user, d.pass)
@@ -392,14 +393,13 @@ func (srv *server) watchSupply() {
 				Height      int64       `json:"height"`
 				TotalAmount json.Number `json:"total_amount"`
 			}
-			if err := rpc.call(&info, "gettxoutsetinfo"); err != nil {
+			if err := rpc.callNamed(&info, "gettxoutsetinfo", map[string]any{"hash_type": "none"}); err != nil {
 				log.Printf("bitcoin supply: %v", err)
 			} else {
-				// Over 10^11 BTC is more satoshis than an int64 holds, so keep
-				// whole BTC as text.
+				// Kept as whole BTC, as text.
 				whole, _, _ := strings.Cut(info.TotalAmount.String(), ".")
 				srv.supply.Store(&btcSupply{Amount: whole, Height: info.Height})
-				time.Sleep(time.Hour)
+				time.Sleep(6 * time.Hour)
 				continue
 			}
 		}

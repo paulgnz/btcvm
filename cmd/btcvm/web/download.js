@@ -18,7 +18,7 @@ try {
 }
 
 try {
-  const res = await fetch('/download/macos/DogecoinVM-Wallet.dmg.sha256');
+  const res = await fetch('/download/macos/BTCVM-Wallet.dmg.sha256');
   if (!res.ok) throw new Error();
   $('dl-sha').textContent = (await res.text()).trim().split(/\s+/)[0];
 } catch {

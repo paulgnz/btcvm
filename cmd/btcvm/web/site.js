@@ -1,7 +1,7 @@
 // What every page shares: the theme toggle in the footer. Light unless the
 // viewer picks dark or their system setting; theme.js applies the saved
 // choice before first paint.
-const THEME_STORE = 'dogevm.theme';
+const THEME_STORE = 'btcvm.theme';
 const themes = ['light', 'dark', 'system'];
 const button = document.getElementById('theme-toggle');
 

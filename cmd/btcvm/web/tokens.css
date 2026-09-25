@@ -1,5 +1,5 @@
 /* The site's colours and type, shared by every page. Colour follows the
-   chain throughout: gold is Dogecoin, teal is DogecoinVM, violet is planned
+   chain throughout: orange is Bitcoin, teal is BTCVM, violet is planned
    work. Light is the default; data-theme="dark" forces dark, and
    data-theme="system" follows the viewer's system setting. */
 
@@ -11,16 +11,16 @@
   --ink-soft: #4a576b;
   --rule: #cdd5cf;
 
-  --coin: #b8912a;          /* Dogecoin */
-  --coin-ink: #7d5f10;      /* Dogecoin, as text */
-  --coin-wash: #f4ecd6;
-  --vm: #1d6f6a;            /* DogecoinVM */
+  --coin: #e8850c;          /* Bitcoin */
+  --coin-ink: #9a4f00;      /* Bitcoin, as text */
+  --coin-wash: #fcebd6;
+  --vm: #1d6f6a;            /* BTCVM */
   --vm-ink: #1d6f6a;
   --vm-wash: #d9ece9;
   --plan: #5b5f86;          /* planned work */
   --plan-wash: #e4e5f1;
 
-  --band: #f2b33d;
+  --band: #f7931a;
   --band-ink: #16233a;
   --error: #b3261e;
   --ok: #1d6f6a;
@@ -30,9 +30,9 @@
   --panel-ink: #f2f4f1;
   --panel-soft: #c3ccd8;
   --panel-track: rgba(242, 244, 241, 0.13);
-  --gauge-doge: #c79c2e;
+  --gauge-btc: #f7931a;
   --gauge-vm: #3fa39a;
-  --gauge-doge-ink: #e6c872;
+  --gauge-btc-ink: #fbb766;
   --gauge-vm-ink: #86d6cd;
   --panel-bad: #ff9b92;
 
@@ -63,9 +63,9 @@
     --ink: #e7ecf2;
     --ink-soft: #a3afc0;
     --rule: #2a3a57;
-    --coin: #d4ab45;
-    --coin-ink: #e2c46d;
-    --coin-wash: rgba(212, 171, 69, 0.13);
+    --coin: #f7931a;
+    --coin-ink: #fbb766;
+    --coin-wash: rgba(247, 147, 26, 0.14);
     --vm: #4fb3a9;
     --vm-ink: #7fd0c7;
     --vm-wash: rgba(79, 179, 169, 0.13);
@@ -76,7 +76,7 @@
     --panel: #1c2c4b;
     --btn: #e7ecf2;
     --btn-ink: #0d1524;
-    --focus: #f2b33d;
+    --focus: #f7931a;
     --control-border: #5a6d8f;
     color-scheme: dark;
   }
@@ -88,9 +88,9 @@
   --ink: #e7ecf2;
   --ink-soft: #a3afc0;
   --rule: #2a3a57;
-  --coin: #d4ab45;
-  --coin-ink: #e2c46d;
-  --coin-wash: rgba(212, 171, 69, 0.13);
+  --coin: #f7931a;
+  --coin-ink: #fbb766;
+  --coin-wash: rgba(247, 147, 26, 0.14);
   --vm: #4fb3a9;
   --vm-ink: #7fd0c7;
   --vm-wash: rgba(79, 179, 169, 0.13);
@@ -101,7 +101,7 @@
   --panel: #1c2c4b;
   --btn: #e7ecf2;
   --btn-ink: #0d1524;
-  --focus: #f2b33d;
+  --focus: #f7931a;
   --control-border: #5a6d8f;
   color-scheme: dark;
 }

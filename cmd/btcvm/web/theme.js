@@ -2,6 +2,6 @@
 // is a separate file because the page's content security policy allows no
 // inline scripts.
 try {
-  const t = localStorage.getItem('dogevm.theme');
+  const t = localStorage.getItem('btcvm.theme');
   if (t === 'dark' || t === 'system') document.documentElement.dataset.theme = t;
 } catch { /* storage unavailable: light */ }

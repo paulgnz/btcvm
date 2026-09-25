@@ -14,7 +14,7 @@ try {
     let v = info[key];
     if (key === 'signers') v = `${info.signers.required} of ${info.signers.publicKeys.length}`;
     else if (key === 'confirmationTiers') v = describeTiers(info);
-    else if ('doge' in el.dataset) v = tidy(v) === '0' && key.startsWith('max') ? 'no limit' : tidy(v);
+    else if ('btc' in el.dataset) v = tidy(v) === '0' && key.startsWith('max') ? 'no limit' : tidy(v);
     if (v !== undefined) el.textContent = v;
   }
 } catch {

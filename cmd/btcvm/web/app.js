@@ -3,24 +3,24 @@ import * as passkey from './passkey.js';
 import { confirmationsFor, describeTiers } from './tiers.js';
 
 const $ = (id) => document.getElementById(id);
-const KEY_STORE = 'dogevm.key';
-const PASSKEY_STORE = 'dogevm.key.passkey'; // the key, encrypted to a passkey
-const WITHDRAW_STORE = 'dogevm.withdrawals';
-const SETUP_STORE = 'dogevm.setup'; // per address: {backedUp, hidden}
+const KEY_STORE = 'btcvm.key';
+const PASSKEY_STORE = 'btcvm.key.passkey'; // the key, encrypted to a passkey
+const WITHDRAW_STORE = 'btcvm.withdrawals';
+const SETUP_STORE = 'btcvm.setup'; // per address: {backedUp, hidden}
 
 let info = null;
 let key = null; // Uint8Array, or null
 let depositShownFor = null;
-let utxos = []; // DogecoinVM
-let dogeUtxos = []; // Dogecoin
-let dogeState = 'unknown'; // unknown | ready | syncing | off
+let utxos = []; // BTCVM
+let btcUtxos = []; // Bitcoin
+let btcState = 'unknown'; // unknown | ready | syncing | off
 // What the setup checklist knows of each network: whether the key has ever
-// had DOGE there. null until the balance has loaded.
+// had BTC there. null until the balance has loaded.
 let seenVm = null;
-let seenDoge = null;
+let seenBTC = null;
 // Confirmed balances as the API gives them, or null until loaded.
 let vmBalance = null;
-let dogeBalance = null;
+let btcBalance = null;
 
 // generation counts key changes. Work started for one key checks it before
 // touching the page, so a slow response never shows under another key.
@@ -56,8 +56,8 @@ async function api(path, body) {
   return data;
 }
 
-// API amounts are DOGE decimal strings with 8 places; show them tidily.
-const tidy = (s) => chain.formatDoge(chain.parseDoge(String(s).replace('-', '')));
+// API amounts are BTC decimal strings with 8 places; show them tidily.
+const tidy = (s) => chain.formatBTC(chain.parseBTC(String(s).replace('-', '')));
 const short = (txid) => `${txid.slice(0, 10)}…${txid.slice(-6)}`;
 
 function showResult(el, message, ok, txid, network = 'vm') {
@@ -66,8 +66,8 @@ function showResult(el, message, ok, txid, network = 'vm') {
   if (txid) {
     // The full transaction, in the right explorer, to check the outcome.
     const a = document.createElement('a');
-    a.href = network === 'doge' ? `https://blockchair.com/dogecoin/transaction/${txid}` : `/explorer#/tx/${txid}`;
-    if (network === 'doge') { a.target = '_blank'; a.rel = 'noopener noreferrer'; }
+    a.href = network === 'btc' ? `https://mempool.space/tx/${txid}` : `/explorer#/tx/${txid}`;
+    if (network === 'btc') { a.target = '_blank'; a.rel = 'noopener noreferrer'; }
     a.textContent = txid;
     a.className = 'mono';
     el.append(' ', a);
@@ -152,29 +152,29 @@ async function loadInfo() {
   $('confs-needed-top').textContent = describeTiers(info);
   $('vm-fee').textContent = tidy(info.vmFee);
   $('min-deposit').textContent = tidy(info.minDeposit);
-  $('doge-fee').textContent = tidy(info.dogeFee);
+  $('btc-fee').textContent = tidy(info.payoutFee);
   $('min-pegout').textContent = tidy(info.minPegOut);
   $('signers').textContent =
-    `Held by ${info.signers.required} of ${info.signers.publicKeys.length} signers. Peg address on Dogecoin: ${info.pegAddress}`;
-  const mainnet = info.dogecoinNetwork === 'mainnet';
+    `Held by ${info.signers.required} of ${info.signers.publicKeys.length} signers. Peg address on Bitcoin: ${info.pegAddress}`;
+  const mainnet = info.bitcoinNetwork === 'mainnet';
   const band = $('network-band');
   band.hidden = false;
-  $('import-key').placeholder = mainnet ? 'Q…, 6… or 64 hex characters' : 'c…, 9… or 64 hex characters';
+  $('import-key').placeholder = mainnet ? 'K…, L… or 64 hex characters' : 'c… or 64 hex characters';
   if (mainnet) {
     $('network-name').textContent = 'beta';
-    band.textContent = 'Beta, with real DOGE. Keep amounts small: the bridge is new and has not been audited.';
+    band.textContent = 'Beta, with real BTC. Keep amounts small: the bridge is new and has not been audited.';
   } else {
     $('network-name').textContent = 'testnet';
     band.textContent = 'Testnet. These coins have no value, and the network may be reset at any time.';
   }
   const limits = [];
-  if (chain.parseDoge(info.maxDeposit) > 0n) limits.push(`Deposits over ${tidy(info.maxDeposit)} DOGE are not credited; they are held for a refund.`);
-  if (chain.parseDoge(info.maxCirculating) > 0n) limits.push(`At most ${tidy(info.maxCirculating)} DOGE can be on DogecoinVM in total during the beta.`);
+  if (chain.parseBTC(info.maxDeposit) > 0n) limits.push(`Deposits over ${tidy(info.maxDeposit)} BTC are not credited; they are held for a refund.`);
+  if (chain.parseBTC(info.maxCirculating) > 0n) limits.push(`At most ${tidy(info.maxCirculating)} BTC can be on BTCVM in total during the beta.`);
   $('deposit-limits').textContent = limits.length ? ' ' + limits.join(' ') : '';
   if (info.faucet.enabled) {
     $('tab-faucet').hidden = false;
     $('faucet-text').textContent =
-      `The faucet sends ${tidy(info.faucet.amount)} DOGE straight to your DogecoinVM address, once a day.`;
+      `The faucet sends ${tidy(info.faucet.amount)} BTC straight to your BTCVM address, once a day.`;
   }
 }
 
@@ -188,9 +188,9 @@ async function refreshStatus() {
       const text = `The bridge is paused: ${s.paused.reason} Deposits and withdrawals already sent are processed when it resumes.`;
       if (band.textContent !== text) band.textContent = text;
     }
-    dogeBlockTime = s.dogecoinBlockTime || 0;
-    renderInflight(); // the quiet-Dogecoin note counts up between blocks
-    $('vm-height').textContent = s.dogecoinvmHeight.toLocaleString('en-US');
+    btcBlockTime = s.bitcoinBlockTime || 0;
+    renderInflight(); // the quiet-Bitcoin note counts up between blocks
+    $('vm-height').textContent = s.btcvmHeight.toLocaleString('en-US');
     // Finality, measured live on this site's own payments.
     const f = s.finality;
     $('vm-finality').hidden = !f;
@@ -200,26 +200,26 @@ async function refreshStatus() {
         ? `Last payment final in ${secs(f.medianMs)}.`
         : `Payments final in ${secs(f.medianMs)}: the median of the last ${f.payments}.`;
     }
-    // While the bridge's Dogecoin node catches up, show how far it has got
+    // While the bridge's Bitcoin node catches up, show how far it has got
     // rather than a block number that looks like the chain tip.
-    const sync = s.dogecoinSync;
+    const sync = s.bitcoinSync;
     const syncing = Boolean(sync && sync.syncing);
     const offline = Boolean(sync && sync.available === false);
     $('sync-meter').hidden = !syncing || offline;
     $('sync-of').hidden = !syncing && !offline;
     $('deposit-sync').hidden = !syncing;
-    $('doge-height').textContent = s.dogecoinHeight.toLocaleString('en-US');
+    $('btc-height').textContent = s.bitcoinHeight.toLocaleString('en-US');
     if (offline) {
-      $('doge-height').textContent = '–';
-      $('sync-of').textContent = "The bridge's Dogecoin node is offline.";
+      $('btc-height').textContent = '–';
+      $('sync-of').textContent = "The bridge's Bitcoin node is offline.";
     } else if (syncing) {
-      // Dogecoin Core's progress is weighted by transactions. Early blocks
+      // Bitcoin Core's progress is weighted by transactions. Early blocks
       // are nearly empty, so a block count races ahead and then stalls.
       const pct = Math.min(99, Math.floor(sync.progress * 100));
       $('sync-fill').style.width = `${pct}%`;
       $('sync-of').textContent = `Node catching up: ${pct}%. Latest block ${sync.headers.toLocaleString('en-US')}.`;
       $('deposit-sync').textContent =
-        `The bridge's Dogecoin node is catching up (${pct}%). It sees and credits new deposits only once it reaches the present.`;
+        `The bridge's Bitcoin node is catching up (${pct}%). It sees and credits new deposits only once it reaches the present.`;
     }
     if (!s.audit) {
       $('verdict').textContent = 'The bridge cannot read both chains right now.';
@@ -227,15 +227,15 @@ async function refreshStatus() {
       return;
     }
     const a = s.audit;
-    const locked = chain.parseDoge(a.locked);
-    const circulating = chain.parseDoge(a.circulating);
+    const locked = chain.parseBTC(a.locked);
+    const circulating = chain.parseBTC(a.circulating);
     // During the beta the bars are drawn against the circulating cap, so
     // they show how much of the beta's room is used.
-    const cap = chain.parseDoge(info.maxCirculating);
+    const cap = chain.parseBTC(info.maxCirculating);
     let max = locked > circulating ? locked : circulating;
     if (cap > max) max = cap;
     $('peg-capacity').textContent = cap > 0n
-      ? `Beta capacity: ${tidy(a.circulating)} of ${tidy(info.maxCirculating)} DOGE in use.`
+      ? `Beta capacity: ${tidy(a.circulating)} of ${tidy(info.maxCirculating)} BTC in use.`
       : '';
     const pct = (v) => (max === 0n ? 0 : Number((v * 1000n) / max) / 10);
     $('locked').textContent = tidy(a.locked);
@@ -244,21 +244,21 @@ async function refreshStatus() {
     $('circulating-fill').style.width = `${pct(circulating)}%`;
     $('pending-in').textContent = tidy(a.pendingPegIns);
     $('pending-out').textContent = tidy(a.pendingPegOuts);
-    // Dogecoin's supply, from the bridge's own node, once it has caught up.
-    const supply = s.dogecoinSupply;
-    $('doge-supply').hidden = !supply;
+    // Bitcoin's supply, from the bridge's own node, once it has caught up.
+    const supply = s.bitcoinSupply;
+    $('btc-supply').hidden = !supply;
     if (supply) {
       const total = BigInt(supply.amount);
       $('supply-total').textContent = total.toLocaleString('en-US');
-      $('supply-total').title = `At Dogecoin block ${supply.height.toLocaleString('en-US')}`;
-      const share = total > 0n ? Number(circulating) / Number(total * chain.KOINU) * 100 : 0;
+      $('supply-total').title = `At Bitcoin block ${supply.height.toLocaleString('en-US')}`;
+      const share = total > 0n ? Number(circulating) / Number(total * chain.SATS) * 100 : 0;
       $('supply-share').textContent = share === 0 ? '0%'
         : share < 0.0001 ? 'under 0.0001%' : `${share.toPrecision(2)}%`;
     }
     let verdict;
     let cls = 'peg-verdict';
     if (!a.solvent) {
-      verdict = 'Not fully backed: the bridge has stopped moving DOGE.';
+      verdict = 'Not fully backed: the bridge has stopped moving BTC.';
       cls += ' bad';
     } else if (locked === 0n && circulating === 0n) {
       verdict = 'Nothing locked yet. The first deposit starts the peg.';
@@ -278,8 +278,8 @@ async function refreshStatus() {
 // --- key and wallet ------------------------------------------------------------
 
 const myDest = () => chain.keyDestination(key);
-const myAddress = () => chain.encodeAddress(myDest(), info.dogecoinvmVersions);
-const myDogeAddress = () => chain.encodeAddress(myDest(), info.dogecoinVersions);
+const myAddress = () => chain.encodeAddress(myDest(), info.btcvmVersions);
+const myBTCAddress = () => chain.encodeAddress(myDest(), info.bitcoinVersions);
 
 // setKey switches keys. It clears everything shown for the previous key.
 // mode is 'store' (keep the key in this browser), 'unlocked' (a passkey
@@ -289,16 +289,16 @@ function setKey(newKey, mode = 'store') {
   key = newKey;
   generation++;
   utxos = [];
-  dogeUtxos = [];
-  dogeState = 'unknown';
+  btcUtxos = [];
+  btcState = 'unknown';
   seenVm = null;
-  seenDoge = null;
+  seenBTC = null;
   lastDeposits = [];
   withdrawalStatus.clear();
   shownConfirmations.clear();
   $('inflight').hidden = true;
   vmBalance = null;
-  dogeBalance = null;
+  btcBalance = null;
   depositShownFor = null;
   let warning = '';
   if (key && mode === 'store') {
@@ -320,16 +320,16 @@ function setKey(newKey, mode = 'store') {
   $('balance').textContent = '…';
   $('balance-pending').textContent = '';
   $('history').replaceChildren();
-  $('doge-balance').textContent = '…';
-  $('doge-pending').textContent = '';
-  $('doge-history').replaceChildren();
-  $('doge-import').hidden = true;
+  $('btc-balance').textContent = '…';
+  $('btc-pending').textContent = '';
+  $('btc-history').replaceChildren();
+  $('btc-import').hidden = true;
   $('deposit-address').textContent = '…';
   $('deposit-verified').textContent = '';
   $('deposit-qr').replaceChildren();
   $('deposits').replaceChildren();
   $('withdrawals').replaceChildren();
-  for (const id of ['send-result', 'withdraw-result', 'faucet-result', 'move-result', 'doge-import-result']) {
+  for (const id of ['send-result', 'withdraw-result', 'faucet-result', 'move-result', 'btc-import-result']) {
     $(id).textContent = '';
     $(id).className = 'result';
   }
@@ -351,13 +351,13 @@ function renderKey() {
   $('my-address').textContent = myAddress();
   // On mainnet the two networks share address versions, so one key has the
   // same address on both.
-  const same = myAddress() === myDogeAddress();
-  $('address-label').textContent = same ? 'Your address' : 'Your DogecoinVM address';
-  $('address-note').textContent = same ? 'The same on Dogecoin and DogecoinVM: one key, two networks.' : '';
-  $('doge-address-line').hidden = same;
-  $('my-doge-address').textContent = same ? '' : myDogeAddress();
+  const same = myAddress() === myBTCAddress();
+  $('address-label').textContent = same ? 'Your address' : 'Your BTCVM address';
+  $('address-note').textContent = same ? 'The same on Bitcoin and BTCVM: one key, two networks.' : '';
+  $('btc-address-line').hidden = same;
+  $('my-btc-address').textContent = same ? '' : myBTCAddress();
   refreshWallet();
-  refreshDogeWallet();
+  refreshBTCWallet();
   refreshDeposits();
   refreshWithdrawalStatus();
   renderInflight();
@@ -369,13 +369,13 @@ function renderKey() {
 // is open.
 function hideSecrets() {
   $('wif-vm').textContent = '';
-  $('wif-doge').textContent = '';
+  $('wif-btc').textContent = '';
   $('secrets').hidden = true;
 }
 $('key-details').addEventListener('toggle', () => {
   if (!$('key-details').open || !key) { hideSecrets(); return; }
-  $('wif-vm').textContent = chain.wif(key, info.dogecoinvmVersions);
-  $('wif-doge').textContent = chain.wif(key, info.dogecoinVersions);
+  $('wif-vm').textContent = chain.wif(key, info.btcvmVersions);
+  $('wif-btc').textContent = chain.wif(key, info.bitcoinVersions);
   $('secrets').hidden = false;
 });
 
@@ -387,13 +387,13 @@ async function refreshWallet() {
     if (gen !== generation) return;
     utxos = a.utxos;
     $('balance').textContent = tidy(a.confirmed);
-    const pending = chain.parseDoge(a.pending);
-    $('balance-pending').textContent = pending > 0n ? `${tidy(a.pending)} DOGE arriving in the next block` : '';
-    renderHistory($('history'), a.history, 'Nothing yet. Move DOGE over from Dogecoin on the Deposit tab.');
+    const pending = chain.parseBTC(a.pending);
+    $('balance-pending').textContent = pending > 0n ? `${tidy(a.pending)} BTC arriving in the next block` : '';
+    renderHistory($('history'), a.history, 'Nothing yet. Move BTC over from Bitcoin on the Deposit tab.');
     settleOutgoing('vm', a.history);
     vmBalance = a.confirmed;
     renderAvailable();
-    seenVm = a.history.length > 0 || chain.parseDoge(a.confirmed) > 0n;
+    seenVm = a.history.length > 0 || chain.parseBTC(a.confirmed) > 0n;
     renderSetup();
   } catch (err) {
     if (gen !== generation) return;
@@ -409,17 +409,17 @@ function renderHistory(list, history, emptyText) {
       const sent = h.net.startsWith('-');
       return item(
         { text: short(h.txid), class: 'mono' },
-        `${sent ? '−' : '+'}${tidy(h.net)} DOGE${h.confirmations > 0 ? '' : ' (pending)'}`,
+        `${sent ? '−' : '+'}${tidy(h.net)} BTC${h.confirmations > 0 ? '' : ' (pending)'}`,
       );
     })));
 }
 
-// refreshDogeWallet shows the key's Dogecoin balance, registering the
-// address with the bridge's Dogecoin index first if need be.
-// The Dogecoin send option and the one-click move need the Dogecoin
+// refreshBTCWallet shows the key's Bitcoin balance, registering the
+// address with the bridge's Bitcoin index first if need be.
+// The Bitcoin send option and the one-click move need the Bitcoin
 // balance; until it's available they're disabled, with the reason shown.
-function setDogeReady(ready, why = '') {
-  const radio = document.querySelector('input[name=send-network][value=doge]');
+function setBTCReady(ready, why = '') {
+  const radio = document.querySelector('input[name=send-network][value=btc]');
   radio.disabled = !ready;
   if (!ready && radio.checked) document.querySelector('input[name=send-network][value=vm]').checked = true;
   radio.parentElement.title = ready ? '' : why;
@@ -429,7 +429,7 @@ function setDogeReady(ready, why = '') {
 // renderAvailable shows what can be spent next to the Send and Withdraw
 // forms, for the network chosen.
 function renderAvailable() {
-  const onDoge = document.querySelector('input[name=send-network]:checked').value === 'doge';
+  const onBTC = document.querySelector('input[name=send-network]:checked').value === 'btc';
   // box shows a network's spendable balance, or why it isn't shown yet.
   const box = (el, network, balance, note) => {
     const label = document.createElement('span');
@@ -441,85 +441,85 @@ function renderAvailable() {
       value.textContent = note;
     } else {
       value.className = 'available-amount amount';
-      value.textContent = `${tidy(balance)} DOGE`;
+      value.textContent = `${tidy(balance)} BTC`;
     }
     el.replaceChildren(label, value);
   };
   const send = $('send-available');
-  send.className = `available ${onDoge ? 'available-doge' : 'available-vm'}`;
-  if (onDoge) box(send, 'Dogecoin', dogeBalance, $('doge-pending').textContent || 'Loading…');
-  else box(send, 'DogecoinVM', vmBalance, 'Loading…');
-  box($('withdraw-available'), 'DogecoinVM', vmBalance, 'Loading…');
+  send.className = `available ${onBTC ? 'available-btc' : 'available-vm'}`;
+  if (onBTC) box(send, 'Bitcoin', btcBalance, $('btc-pending').textContent || 'Loading…');
+  else box(send, 'BTCVM', vmBalance, 'Loading…');
+  box($('withdraw-available'), 'BTCVM', vmBalance, 'Loading…');
 }
 for (const radio of document.querySelectorAll('input[name=send-network]')) radio.addEventListener('change', renderAvailable);
 
-async function refreshDogeWallet() {
-  if (!key || !info.dogeWallet) {
-    $('doge-balance').textContent = '–';
-    $('doge-pending').textContent = 'Not available from this bridge.';
-    dogeState = 'off';
-    setDogeReady(false, "This bridge doesn't serve Dogecoin balances.");
+async function refreshBTCWallet() {
+  if (!key || !info.btcWallet) {
+    $('btc-balance').textContent = '–';
+    $('btc-pending').textContent = 'Not available from this bridge.';
+    btcState = 'off';
+    setBTCReady(false, "This bridge doesn't serve Bitcoin balances.");
     return;
   }
   const gen = generation;
-  const address = myDogeAddress();
+  const address = myBTCAddress();
   try {
     let a;
     try {
-      a = await api(`/api/doge/address/${address}`);
+      a = await api(`/api/btc/address/${address}`);
     } catch (err) {
       if (err.status !== 404) throw err;
-      await api('/api/doge/watch', { address });
-      a = await api(`/api/doge/address/${address}`);
+      await api('/api/btc/watch', { address });
+      a = await api(`/api/btc/address/${address}`);
     }
     if (gen !== generation) return;
-    dogeState = 'ready';
-    setDogeReady(true);
-    dogeUtxos = a.utxos;
-    $('doge-balance').textContent = tidy(a.confirmed);
-    const pending = chain.parseDoge(a.pending.replace('-', ''));
-    settleOutgoing('doge', a.history);
-    const change = outgoing().filter((o) => o.network === 'doge').reduce((n, o) => n + BigInt(o.change), 0n);
-    $('doge-pending').textContent = pending === 0n ? ''
+    btcState = 'ready';
+    setBTCReady(true);
+    btcUtxos = a.utxos;
+    $('btc-balance').textContent = tidy(a.confirmed);
+    const pending = chain.parseBTC(a.pending.replace('-', ''));
+    settleOutgoing('btc', a.history);
+    const change = outgoing().filter((o) => o.network === 'btc').reduce((n, o) => n + BigInt(o.change), 0n);
+    $('btc-pending').textContent = pending === 0n ? ''
       : a.pending.startsWith('-')
-        ? `${tidy(a.pending)} DOGE leaving${change > 0n ? `; ${chain.formatDoge(change)} DOGE change comes back` : ''} when it confirms, usually within a minute.`
-        : `${tidy(a.pending)} DOGE arriving, waiting for a block.`;
-    renderHistory($('doge-history'), a.history, 'Nothing yet. Send DOGE to your address from any Dogecoin wallet.');
-    dogeBalance = a.confirmed;
+        ? `${tidy(a.pending)} BTC leaving${change > 0n ? `; ${chain.formatBTC(change)} BTC change comes back` : ''} when it confirms, usually within about 10 minutes.`
+        : `${tidy(a.pending)} BTC arriving, waiting for a block.`;
+    renderHistory($('btc-history'), a.history, 'Nothing yet. Send BTC to your address from any Bitcoin wallet.');
+    btcBalance = a.confirmed;
     renderAvailable();
-    seenDoge = a.history.length > 0 || chain.parseDoge(a.confirmed) > 0n;
+    seenBTC = a.history.length > 0 || chain.parseBTC(a.confirmed) > 0n;
     renderSetup();
-    $('doge-import').hidden = false;
-    $('move-available').textContent = `Available on Dogecoin: ${tidy(a.confirmed)} DOGE.`;
+    $('btc-import').hidden = false;
+    $('move-available').textContent = `Available on Bitcoin: ${tidy(a.confirmed)} BTC.`;
   } catch (err) {
     if (gen !== generation) return;
-    dogeState = err.status === 503 ? 'syncing' : 'unknown';
-    setDogeReady(false, "Available once the bridge's Dogecoin node has caught up.");
-    $('doge-balance').textContent = '…';
-    $('doge-pending').textContent = err.status === 503
-      ? "Shows once the bridge's Dogecoin node has caught up."
-      : `Can't load your Dogecoin balance: ${err.message}`;
-    $('move-available').textContent = $('doge-pending').textContent;
+    btcState = err.status === 503 ? 'syncing' : 'unknown';
+    setBTCReady(false, "Available once the bridge's Bitcoin node has caught up.");
+    $('btc-balance').textContent = '…';
+    $('btc-pending').textContent = err.status === 503
+      ? "Shows once the bridge's Bitcoin node has caught up."
+      : `Can't load your Bitcoin balance: ${err.message}`;
+    $('move-available').textContent = $('btc-pending').textContent;
     renderAvailable();
-    $('doge-history').replaceChildren(empty(err.status === 503
-      ? "Your Dogecoin activity appears once the bridge's Dogecoin node has caught up."
-      : "Can't load your Dogecoin activity right now."));
+    $('btc-history').replaceChildren(empty(err.status === 503
+      ? "Your Bitcoin activity appears once the bridge's Bitcoin node has caught up."
+      : "Can't load your Bitcoin activity right now."));
   }
 }
 
-$('doge-import-form').addEventListener('submit', async (e) => {
+$('btc-import-form').addEventListener('submit', async (e) => {
   e.preventDefault();
   const button = e.submitter;
   button.disabled = true;
   try {
-    const txid = $('doge-import-txid').value.trim().toLowerCase();
+    const txid = $('btc-import-txid').value.trim().toLowerCase();
     if (!/^[0-9a-f]{64}$/.test(txid)) throw new Error('A transaction ID is 64 hexadecimal characters.');
-    const r = await api('/api/doge/import', { address: myDogeAddress(), txid });
-    showResult($('doge-import-result'), `Added ${r.imported} payment${r.imported === 1 ? '' : 's'}.`, true);
-    $('doge-import-form').reset();
-    refreshDogeWallet();
+    const r = await api('/api/btc/import', { address: myBTCAddress(), txid });
+    showResult($('btc-import-result'), `Added ${r.imported} payment${r.imported === 1 ? '' : 's'}.`, true);
+    $('btc-import-form').reset();
+    refreshBTCWallet();
   } catch (err) {
-    showResult($('doge-import-result'), err.message, false);
+    showResult($('btc-import-result'), err.message, false);
   } finally {
     button.disabled = false;
   }
@@ -551,11 +551,11 @@ function goTo(tab, id) {
 function setupSteps() {
   const state = setupState();
   const protectedByPasskey = store.get(PASSKEY_STORE) !== null;
-  const funded = seenDoge === true || seenVm === true;
+  const funded = seenBTC === true || seenVm === true;
   const steps = [
     {
       title: 'Back up your key',
-      text: "It's your wallet on both networks. Without a copy, DOGE here can't be recovered if this browser's data is cleared.",
+      text: "It's your wallet on both networks. Without a copy, BTC here can't be recovered if this browser's data is cleared.",
       done: state.backedUp === true,
       actions: [
         ['Show my key', () => { $('key-details').open = true; goTo(null, 'key-details'); }],
@@ -569,14 +569,14 @@ function setupSteps() {
       actions: [['Protect with a passkey', () => $('passkey-protect').click()]],
     },
     {
-      title: 'Get DOGE on Dogecoin',
-      text: dogeState === 'syncing'
-        ? "Send DOGE to your address above from any wallet or exchange. It shows here once the bridge's Dogecoin node has caught up."
-        : 'Send DOGE to your address above from any wallet or exchange.',
+      title: 'Get BTC on Bitcoin',
+      text: btcState === 'syncing'
+        ? "Send BTC to your address above from any wallet or exchange. It shows here once the bridge's Bitcoin node has caught up."
+        : 'Send BTC to your address above from any wallet or exchange.',
       done: funded,
       actions: [['Copy my address', async (button) => {
         try {
-          await navigator.clipboard.writeText(myDogeAddress());
+          await navigator.clipboard.writeText(myBTCAddress());
           button.textContent = 'Copied';
           setTimeout(() => { button.textContent = 'Copy my address'; }, 2000);
         } catch {
@@ -586,14 +586,14 @@ function setupSteps() {
       }]],
     },
     {
-      title: 'Move it to DogecoinVM',
-      text: 'Move DOGE across the bridge from the Deposit tab. Payments on DogecoinVM are final in about two seconds.',
+      title: 'Move it to BTCVM',
+      text: 'Move BTC across the bridge from the Deposit tab. Payments on BTCVM are final within seconds.',
       done: seenVm === true,
       actions: [['Go to Deposit', () => goTo('deposit', 'move-amount')]],
     },
     {
       title: 'Withdraw some back',
-      text: 'Send DOGE back to your own Dogecoin address to complete the round trip.',
+      text: 'Send BTC back to your own Bitcoin address to complete the round trip.',
       done: savedWithdrawals().length > 0,
       actions: [['Go to Withdraw', () => goTo('withdraw', 'withdraw-to')]],
     },
@@ -728,7 +728,7 @@ $('import-form').addEventListener('submit', async (e) => {
 });
 
 $('forget-key').addEventListener('click', () => {
-  if (confirm('Remove this key from the browser? Without a backup, its DOGE is gone.')) setKey(null);
+  if (confirm('Remove this key from the browser? Without a backup, its BTC is gone.')) setKey(null);
 });
 
 // Each network's coins, and where to check and broadcast its transactions.
@@ -739,11 +739,11 @@ const networks = {
     broadcast: '/api/tx',
     refresh: () => refreshWallet(),
   },
-  doge: {
-    utxos: () => dogeUtxos,
-    getRawTx: async (txid) => (await api(`/api/doge/rawtx/${txid}`)).hex,
-    broadcast: '/api/doge/tx',
-    refresh: () => refreshDogeWallet(),
+  btc: {
+    utxos: () => btcUtxos,
+    getRawTx: async (txid) => (await api(`/api/btc/rawtx/${txid}`)).hex,
+    broadcast: '/api/btc/tx',
+    refresh: () => refreshBTCWallet(),
   },
 };
 
@@ -759,7 +759,7 @@ function reviewLine(label, address, value, note, cls) {
     li.append(n);
   };
   add('span', 'review-label', label);
-  add('span', 'review-amount', value === null ? '' : `${chain.formatDoge(value)} DOGE`);
+  add('span', 'review-amount', value === null ? '' : `${chain.formatBTC(value)} BTC`);
   if (address) add('span', 'review-address', address);
   if (note) add('p', 'review-note', note);
   return li;
@@ -770,9 +770,9 @@ function reviewLine(label, address, value, note, cls) {
 // context names addresses the page expects: the peg reserve for a
 // withdrawal, the deposit address for a move.
 function review(plan, network, context = {}) {
-  const doge = network === 'doge';
-  const versions = doge ? info.dogecoinVersions : info.dogecoinvmVersions;
-  const mine = doge ? myDogeAddress() : myAddress();
+  const btc = network === 'btc';
+  const versions = btc ? info.bitcoinVersions : info.btcvmVersions;
+  const mine = btc ? myBTCAddress() : myAddress();
   const lines = [];
   const problems = [];
   let change = 0n;
@@ -783,20 +783,20 @@ function review(plan, network, context = {}) {
       change += o.value;
       lines.push(reviewLine('Back to you (change)', o.address, o.value));
     } else if (o.data) {
-      const dest = chain.pegOutDestination(o.data, info.dogecoinVersions);
+      const dest = chain.pegOutDestination(o.data, info.bitcoinVersions);
       if (dest && context.withdrawTo === dest) {
-        lines.push(reviewLine('The bridge then pays on Dogecoin', dest, null));
+        lines.push(reviewLine('The bridge then pays on Bitcoin', dest, null));
       } else {
         problems.push('The transaction carries a bridge instruction this page did not ask for.');
       }
     } else if (o.address && o.address === context.reserve) {
-      const gets = o.value - chain.parseDoge(info.dogeFee);
+      const gets = o.value - chain.parseBTC(info.payoutFee);
       lines.push(reviewLine('To the bridge, to withdraw', o.address, o.value,
-        `You receive ${chain.formatDoge(gets > 0n ? gets : 0n)} DOGE on Dogecoin, after the ${tidy(info.dogeFee)} DOGE Dogecoin fee.`));
+        `You receive about ${chain.formatBTC(gets > 0n ? gets : 0n)} BTC on Bitcoin, after a network fee of about ${tidy(info.payoutFee)} BTC at today's rate (${info.btcFeeRate} sat/vB). The exact fee is set when the bridge pays.`));
     } else if (o.address && o.address === context.deposit) {
-      const gets = o.value - chain.parseDoge(info.vmFee);
+      const gets = o.value - chain.parseBTC(info.vmFee);
       lines.push(reviewLine('To your deposit address', o.address, o.value,
-        `Credited as ${chain.formatDoge(gets > 0n ? gets : 0n)} DOGE on DogecoinVM after ${confirmationsFor(info, o.value)} Dogecoin confirmation${confirmationsFor(info, o.value) === 1 ? '' : 's'}, less the ${tidy(info.vmFee)} DOGE bridge fee.`));
+        `Credited as ${chain.formatBTC(gets > 0n ? gets : 0n)} BTC on BTCVM after ${confirmationsFor(info, o.value)} Bitcoin confirmation${confirmationsFor(info, o.value) === 1 ? '' : 's'}, less the ${tidy(info.vmFee)} BTC bridge fee.`));
     } else if (o.address) {
       lines.push(reviewLine('To', o.address, o.value));
     } else {
@@ -804,12 +804,12 @@ function review(plan, network, context = {}) {
     }
   }
   if (outTotal + plan.fee !== plan.inputTotal) problems.push("The transaction's amounts don't add up.");
-  if (context.reserve && context.withdrawTo === undefined) problems.push('A withdrawal needs a Dogecoin address.');
+  if (context.reserve && context.withdrawTo === undefined) problems.push('A withdrawal needs a Bitcoin address.');
   lines.push(reviewLine('Network fee', null, plan.fee));
   lines.push(reviewLine('Leaves your wallet', null, plan.inputTotal - change, null, 'review-total'));
 
-  $('review-network').textContent = doge ? 'On Dogecoin' : 'On DogecoinVM';
-  $('review-network').className = `review-network${doge ? ' doge' : ''}`;
+  $('review-network').textContent = btc ? 'On Bitcoin' : 'On BTCVM';
+  $('review-network').className = `review-network${btc ? ' btc' : ''}`;
   $('review-lines').replaceChildren(...lines);
   $('review-problem').hidden = problems.length === 0;
   $('review-problem').textContent = problems.length ? `${problems.join(' ')} Don't send it.` : '';
@@ -834,22 +834,23 @@ function showFailure(el, err) {
   el.className = 'result';
 }
 
-// pay plans a payment on a network ('vm' or 'doge'), shows it for review,
+// pay plans a payment on a network ('vm' or 'btc'), shows it for review,
 // signs it once confirmed, calls beforeBroadcast with its txid (so a record
 // exists even if the broadcast response is lost), and broadcasts it. It
 // returns {txid, unknown}: unknown is true if the bridge never answered, so
 // the payment may or may not have gone through.
 async function pay(script, amount, data, beforeBroadcast, network = 'vm', context = {}) {
   const net = networks[network];
-  if (network === 'doge' && dogeState !== 'ready') {
-    throw new Error("Your Dogecoin balance isn't available yet; try again once it shows.");
+  if (network === 'btc' && btcState !== 'ready') {
+    throw new Error("Your Bitcoin balance isn't available yet; try again once it shows.");
   }
   const gen = generation;
   // Coins a payment still confirming already spends can't be spent again.
   const inUse = coinsInUse(network);
   const plan = await chain.planPayment({
     key, utxos: net.utxos().filter((u) => !inUse.has(`${u.txid}:${u.vout}`)), getRawTx: net.getRawTx,
-    script, amount, data, feePerByte: network === 'vm' ? chain.VM_FEE_PER_BYTE : undefined,
+    script, amount, data,
+    feeRate: network === 'vm' ? chain.VM_FEE_RATE : BigInt(Math.max(info.btcFeeRate || 0, 1)),
   });
   if (!(await review(plan, network, context))) throw cancelled();
   if (gen !== generation || !key) throw new Error('The wallet changed during review, so nothing was sent.');
@@ -876,8 +877,8 @@ async function pay(script, amount, data, beforeBroadcast, network = 'vm', contex
 
 // Each payment this wallet sends is remembered until it confirms: the coins
 // it spends (so they aren't offered again) and its change (so a balance
-// that reads 0 while it confirms shows where the DOGE is).
-const OUTGOING_STORE = 'dogevm.outgoing';
+// that reads 0 while it confirms shows where the BTC is).
+const OUTGOING_STORE = 'btcvm.outgoing';
 const outgoingStore = () => `${OUTGOING_STORE}.${myAddress()}`;
 function outgoing() {
   try { return JSON.parse(store.get(outgoingStore()) || '[]'); } catch { return []; }
@@ -885,8 +886,8 @@ function outgoing() {
 const saveOutgoing = (list) => store.set(outgoingStore(), JSON.stringify(list.slice(0, 50)));
 
 function rememberOutgoing(plan, txid, network, context, amount) {
-  const versions = network === 'doge' ? info.dogecoinVersions : info.dogecoinvmVersions;
-  const mine = network === 'doge' ? myDogeAddress() : myAddress();
+  const versions = network === 'btc' ? info.bitcoinVersions : info.btcvmVersions;
+  const mine = network === 'btc' ? myBTCAddress() : myAddress();
   const outs = chain.reviewOutputs(plan.unsignedHex, versions);
   const change = outs.filter((o) => o.address === mine).reduce((n, o) => n + o.value, 0n);
   const kind = context.deposit ? 'move' : context.reserve ? 'withdraw' : 'send';
@@ -917,7 +918,7 @@ function settleOutgoing(network, history) {
 
 // What the panel draws from, refreshed as each list loads.
 let lastDeposits = [];
-let dogeBlockTime = 0; // when the latest Dogecoin block was found, unix seconds
+let btcBlockTime = 0; // when the latest Bitcoin block was found, unix seconds
 const withdrawalStatus = new Map(); // txid -> /api/pegout answer
 const shownConfirmations = new Map(); // deposit -> confirmations drawn, to animate new ones
 
@@ -934,7 +935,13 @@ async function refreshWithdrawalStatus() {
   if (gen === generation) renderInflight();
 }
 
-const minutes = (n) => (n <= 1 ? 'about a minute' : `about ${n} minutes`);
+// minutes is how long n Bitcoin blocks usually take: about 10 minutes each.
+const minutes = (n) => {
+  const m = Math.max(n, 1) * 10;
+  if (m < 60) return `about ${m} minutes`;
+  const h = Math.round(m / 30) / 2;
+  return h === 1 ? 'about an hour' : `about ${h} hours`;
+};
 
 // card builds one in-flight entry: a title, an optional progress row, and
 // a line of detail.
@@ -970,9 +977,9 @@ function blocks(id, have, need) {
   return row;
 }
 
-// dogeWaiting marks a card as waiting on the next Dogecoin block.
-function dogeWaiting(c) {
-  c.dataset.dogecoin = '1';
+// btcWaiting marks a card as waiting on the next Bitcoin block.
+function btcWaiting(c) {
+  c.dataset.bitcoin = '1';
   return c;
 }
 
@@ -996,18 +1003,18 @@ function renderInflight() {
 
   for (const d of lastDeposits) {
     if (['credited', 'refunded'].includes(d.status)) continue;
-    const gets = chain.formatDoge(chain.parseDoge(d.amount) - chain.parseDoge(info.vmFee));
-    const title = `Moving ${tidy(d.amount)} DOGE to DogecoinVM`;
+    const gets = chain.formatBTC(chain.parseBTC(d.amount) - chain.parseBTC(info.vmFee));
+    const title = `Moving ${tidy(d.amount)} BTC to BTCVM`;
     if (d.status === 'held') {
       cards.push(card(title, null, `Held for a refund: ${d.reason}`, 'held'));
     } else if (d.status === 'crediting' || d.confirmations >= d.required) {
-      cards.push(card(title, blocks(`${d.txid}:${d.vout}`, d.required, d.required), `Confirmed. Crediting ${gets} DOGE now.`));
+      cards.push(card(title, blocks(`${d.txid}:${d.vout}`, d.required, d.required), `Confirmed. Crediting ${gets} BTC now.`));
     } else if (d.status === 'waiting_for_capacity') {
       cards.push(card(title, null, 'Confirmed, and waiting for room under the beta limit.'));
     } else {
       const left = d.required - d.confirmations;
-      cards.push(dogeWaiting(card(title, blocks(`${d.txid}:${d.vout}`, d.confirmations, d.required),
-        `${d.confirmations} of ${d.required} confirmations. ${minutes(left)[0].toUpperCase()}${minutes(left).slice(1)} left, then ${gets} DOGE arrives.`)));
+      cards.push(btcWaiting(card(title, blocks(`${d.txid}:${d.vout}`, d.confirmations, d.required),
+        `${d.confirmations} of ${d.required} confirmations. ${minutes(left)[0].toUpperCase()}${minutes(left).slice(1)} left, then ${gets} BTC arrives.`)));
     }
   }
 
@@ -1016,32 +1023,32 @@ function renderInflight() {
     if (!p || p.paymentConfirmations > 0) continue;
     const final = p.status === 'pending' || p.status === 'paid';
     const paid = p.status === 'paid';
-    const detail = paid ? `${tidy(p.pays)} DOGE is on its way; it confirms in the next Dogecoin block, usually within a minute.`
-      : final ? 'The bridge pays it within seconds.' : 'Waiting for it to be final on DogecoinVM, about two seconds.';
-    const c = card(`Withdrawing ${w.amount} DOGE to Dogecoin`,
-      steps([['Final on DogecoinVM', final], ['Paid on Dogecoin', paid], ['In a Dogecoin block', false]]), detail);
-    cards.push(paid ? dogeWaiting(c) : c);
+    const detail = paid ? `${tidy(p.pays)} BTC is on its way; it confirms in the next Bitcoin block, usually within about 10 minutes. If fees rise and it waits half an hour, the bridge resends it with a higher fee.`
+      : final ? 'The bridge pays it within seconds.' : 'Waiting for it to be final on BTCVM, a few seconds.';
+    const c = card(`Withdrawing ${w.amount} BTC to Bitcoin`,
+      steps([['Final on BTCVM', final], ['Paid on Bitcoin', paid], ['In a Bitcoin block', false]]), detail);
+    cards.push(paid ? btcWaiting(c) : c);
   }
 
   for (const o of outgoing()) {
-    if (o.network !== 'doge' || o.kind === 'withdraw') continue;
+    if (o.network !== 'btc' || o.kind === 'withdraw') continue;
     if (o.kind === 'move' && depositTxids.has(o.txid)) continue; // the deposit card covers it
     const change = BigInt(o.change);
-    const back = change > 0n ? ` ${chain.formatDoge(change)} DOGE change comes back when it confirms.` : '';
-    const title = o.kind === 'move' ? `Moving ${chain.formatDoge(BigInt(o.amount))} DOGE to DogecoinVM`
-      : `Sending ${chain.formatDoge(BigInt(o.amount))} DOGE on Dogecoin`;
-    cards.push(dogeWaiting(card(title, steps([['Sent', true], ['In a Dogecoin block', false]]),
-      `Waiting for a Dogecoin block, usually within a minute.${back}`)));
+    const back = change > 0n ? ` ${chain.formatBTC(change)} BTC change comes back when it confirms.` : '';
+    const title = o.kind === 'move' ? `Moving ${chain.formatBTC(BigInt(o.amount))} BTC to BTCVM`
+      : `Sending ${chain.formatBTC(BigInt(o.amount))} BTC on Bitcoin`;
+    cards.push(btcWaiting(card(title, steps([['Sent', true], ['In a Bitcoin block', false]]),
+      `Waiting for a Bitcoin block, usually within about 10 minutes.${back}`)));
   }
 
-  // Dogecoin blocks come at random. When one is slow, say so rather than
+  // Bitcoin blocks come at random. When one is slow, say so rather than
   // leave a countdown that looks stuck.
-  const quiet = dogeBlockTime ? Math.floor((Date.now() / 1000 - dogeBlockTime) / 60) : 0;
-  if (quiet >= 4) {
-    for (const c of cards.filter((c) => c.dataset.dogecoin)) {
+  const quiet = btcBlockTime ? Math.floor((Date.now() / 1000 - btcBlockTime) / 60) : 0;
+  if (quiet >= 30) {
+    for (const c of cards.filter((c) => c.dataset.bitcoin)) {
       const p = document.createElement('p');
       p.className = 'inflight-quiet';
-      p.textContent = `Dogecoin hasn't found a block for ${quiet} minutes. Blocks average a minute but come at random; this continues when the next one arrives.`;
+      p.textContent = `Bitcoin hasn't found a block for ${quiet} minutes. Blocks average 10 minutes but come at random; this continues when the next one arrives.`;
       c.append(p);
     }
   }
@@ -1057,11 +1064,11 @@ $('send-form').addEventListener('submit', async (e) => {
   button.disabled = true;
   try {
     const network = document.querySelector('input[name=send-network]:checked').value;
-    const versions = network === 'doge' ? info.dogecoinVersions : info.dogecoinvmVersions;
+    const versions = network === 'btc' ? info.bitcoinVersions : info.btcvmVersions;
     const to = chain.decodeAddress($('send-to').value, versions);
-    const amount = chain.parseDoge($('send-amount').value);
+    const amount = chain.parseBTC($('send-amount').value);
     const { txid, unknown } = await pay(chain.pkScript(to), amount, undefined, undefined, network);
-    const where = network === 'doge' ? 'on Dogecoin' : 'on DogecoinVM';
+    const where = network === 'btc' ? 'on Bitcoin' : 'on BTCVM';
     if (unknown) showResult($('send-result'), unknownOutcome, false, txid, network);
     else showResult($('send-result'), `Sent ${where}. Transaction:`, true, txid, network);
     $('send-to').value = '';
@@ -1085,7 +1092,7 @@ async function showDeposit() {
       if (gen !== generation) return;
       // The page derives the address itself from the signers' public keys;
       // if the server says otherwise, show nothing to send to.
-      const expected = chain.depositAddress(myDest(), info.signers, info.dogecoinVersions);
+      const expected = chain.depositAddress(myDest(), info.signers, info.bitcoinVersions);
       if (d.depositAddress !== expected) {
         $('deposit-address').textContent = 'Unavailable';
         $('deposit-qr').replaceChildren();
@@ -1098,7 +1105,7 @@ async function showDeposit() {
       $('deposit-address').textContent = expected;
       $('deposit-verified').className = 'verified';
       $('deposit-verified').textContent =
-        `Consistency check passed: your browser derived the same address from the ${info.signers.required}-of-${info.signers.publicKeys.length} peg signers' keys and your DogecoinVM address.`;
+        `Consistency check passed: your browser derived the same address from the ${info.signers.required}-of-${info.signers.publicKeys.length} peg signers' keys and your BTCVM address.`;
       const qr = qrcode(0, 'M');
       qr.addData(expected);
       qr.make();
@@ -1114,31 +1121,31 @@ async function showDeposit() {
 }
 
 // The one-click deposit: pay the personal deposit address from the key's own
-// Dogecoin balance. The address is the one this page derives from the
+// Bitcoin balance. The address is the one this page derives from the
 // signers' keys, and it is registered with the bridge first.
 $('move-form').addEventListener('submit', async (e) => {
   e.preventDefault();
   const button = e.submitter;
   button.disabled = true;
   try {
-    const amount = chain.parseDoge($('move-amount').value);
-    const min = chain.parseDoge(info.minDeposit);
-    const max = chain.parseDoge(info.maxDeposit);
-    if (amount < min) throw new Error(`The smallest deposit is ${tidy(info.minDeposit)} DOGE.`);
+    const amount = chain.parseBTC($('move-amount').value);
+    const min = chain.parseBTC(info.minDeposit);
+    const max = chain.parseBTC(info.maxDeposit);
+    if (amount < min) throw new Error(`The smallest deposit is ${tidy(info.minDeposit)} BTC.`);
     if (max > 0n && amount > max) {
-      throw new Error(`During the beta a deposit can be at most ${tidy(info.maxDeposit)} DOGE; a larger one is held for a refund.`);
+      throw new Error(`During the beta a deposit can be at most ${tidy(info.maxDeposit)} BTC; a larger one is held for a refund.`);
     }
     if (depositShownFor !== myAddress()) await showDeposit();
     if (depositShownFor !== myAddress()) throw new Error("Your deposit address couldn't be checked, so nothing was sent. See below.");
-    const expected = chain.depositAddress(myDest(), info.signers, info.dogecoinVersions);
-    const script = chain.pkScript(chain.decodeAddress(expected, info.dogecoinVersions));
-    const { txid, unknown } = await pay(script, amount, undefined, undefined, 'doge', { deposit: expected });
+    const expected = chain.depositAddress(myDest(), info.signers, info.bitcoinVersions);
+    const script = chain.pkScript(chain.decodeAddress(expected, info.bitcoinVersions));
+    const { txid, unknown } = await pay(script, amount, undefined, undefined, 'btc', { deposit: expected });
     if (unknown) {
-      showResult($('move-result'), unknownOutcome, false, txid, 'doge');
+      showResult($('move-result'), unknownOutcome, false, txid, 'btc');
     } else {
       const n = confirmationsFor(info, amount);
       showResult($('move-result'),
-        `Sent to your deposit address. It's credited on DogecoinVM after ${n} Dogecoin confirmation${n === 1 ? '' : 's'}, about ${n === 1 ? 'a minute' : `${n} minutes`}. Transaction:`, true, txid, 'doge');
+        `Sent to your deposit address. It's credited on BTCVM after ${n} Bitcoin confirmation${n === 1 ? '' : 's'}, ${minutes(n)}. Transaction:`, true, txid, 'btc');
     }
     $('move-amount').value = '';
     setTimeout(refreshDeposits, 3000);
@@ -1151,8 +1158,8 @@ $('move-form').addEventListener('submit', async (e) => {
 
 function depositStatus(d) {
   switch (d.status) {
-    case 'credited': return { text: `Credited ${tidy(d.credited)} DOGE`, class: 'status-done' };
-    case 'refunded': return { text: 'Refunded on Dogecoin', class: 'status-done' };
+    case 'credited': return { text: `Credited ${tidy(d.credited)} BTC`, class: 'status-done' };
+    case 'refunded': return { text: 'Refunded on Bitcoin', class: 'status-done' };
     case 'held': return { text: `Held for a refund: ${d.reason}`, class: 'status-held' };
     case 'waiting_for_capacity': return { text: 'Confirmed; waiting for room under the beta limit', class: 'status-waiting' };
     case 'crediting': return { text: 'Confirmed; crediting now', class: 'status-waiting' };
@@ -1169,8 +1176,8 @@ async function refreshDeposits() {
     lastDeposits = deposits;
     renderInflight();
     $('deposits').replaceChildren(...(deposits.length === 0
-      ? [empty('No deposits yet. They show up here once Dogecoin sees them.')]
-      : deposits.map((d) => item(`${tidy(d.amount)} DOGE`, depositStatus(d)))));
+      ? [empty('No deposits yet. They show up here once Bitcoin sees them.')]
+      : deposits.map((d) => item(`${tidy(d.amount)} BTC`, depositStatus(d)))));
   } catch { /* try again on the next poll */ }
 }
 
@@ -1191,14 +1198,14 @@ $('withdraw-form').addEventListener('submit', async (e) => {
   let pendingTxid = null;
   try {
     const toText = $('withdraw-to').value.trim();
-    const to = chain.decodeAddress(toText, info.dogecoinVersions);
-    const amount = chain.parseDoge($('withdraw-amount').value);
-    if (amount < chain.parseDoge(info.minPegOut)) throw new Error(`The minimum withdrawal is ${tidy(info.minPegOut)} DOGE.`);
-    const reserve = chain.decodeAddress(info.reserveAddress, info.dogecoinvmVersions);
+    const to = chain.decodeAddress(toText, info.bitcoinVersions);
+    const amount = chain.parseBTC($('withdraw-amount').value);
+    if (amount < chain.parseBTC(info.minPegOut)) throw new Error(`The minimum withdrawal is ${tidy(info.minPegOut)} BTC.`);
+    const reserve = chain.decodeAddress(info.reserveAddress, info.btcvmVersions);
     const { txid, unknown } = await pay(chain.pkScript(reserve), amount, chain.pegOutData(to), (id) => {
       pendingTxid = id;
-      saveWithdrawals([{ txid: id, to: toText, amount: chain.formatDoge(amount) }, ...savedWithdrawals()]);
-    }, 'vm', { reserve: info.reserveAddress, withdrawTo: chain.encodeAddress(to, info.dogecoinVersions) });
+      saveWithdrawals([{ txid: id, to: toText, amount: chain.formatBTC(amount) }, ...savedWithdrawals()]);
+    }, 'vm', { reserve: info.reserveAddress, withdrawTo: chain.encodeAddress(to, info.bitcoinVersions) });
     if (unknown) showResult($('withdraw-result'), unknownOutcome, false, txid);
     else showResult($('withdraw-result'), 'Withdrawal sent. The bridge pays out once it is in a block. Transaction:', true, txid);
     $('withdraw-form').reset();
@@ -1215,7 +1222,7 @@ $('withdraw-form').addEventListener('submit', async (e) => {
 
 $('withdraw-to-mine').addEventListener('click', () => {
   if (!key) return;
-  $('withdraw-to').value = myDogeAddress();
+  $('withdraw-to').value = myBTCAddress();
   $('withdraw-amount').focus();
 });
 
@@ -1223,11 +1230,11 @@ async function renderWithdrawals() {
   if (!key) return;
   const gen = generation;
   const rows = savedWithdrawals().map((w) => {
-    const li = item(`${w.amount} DOGE to ${w.to.slice(0, 8)}…`, { text: 'Checking…', class: 'status-waiting' });
+    const li = item(`${w.amount} BTC to ${w.to.slice(0, 8)}…`, { text: 'Checking…', class: 'status-waiting' });
     api(`/api/pegout/${w.txid}`).then((p) => {
       if (gen !== generation) return;
       if (p.status === 'paid') {
-        li.lastChild.textContent = `Paid ${tidy(p.pays)} DOGE on Dogecoin`;
+        li.lastChild.textContent = `Paid ${tidy(p.pays)} BTC on Bitcoin`;
         li.lastChild.className = 'status-done';
       } else if (p.status === 'pending') {
         li.lastChild.textContent = 'Waiting for the bridge';
@@ -1246,7 +1253,7 @@ $('faucet-claim').addEventListener('click', async (e) => {
   e.target.disabled = true;
   try {
     const r = await api('/api/faucet', { address: myAddress() });
-    showResult($('faucet-result'), `Sent ${tidy(r.amount)} DOGE. It arrives in the next block.`, true);
+    showResult($('faucet-result'), `Sent ${tidy(r.amount)} BTC. It arrives in the next block.`, true);
     setTimeout(refreshWallet, 3000);
   } catch (err) {
     showResult($('faucet-result'), err.message, false);
@@ -1298,7 +1305,7 @@ async function start() {
     refreshStatus();
     if (stream.readyState === EventSource.OPEN) return;
     refreshWallet();
-    refreshDogeWallet();
+    refreshBTCWallet();
     refreshDeposits();
     refreshWithdrawalStatus();
     if (!$('panel-withdraw').hidden) renderWithdrawals();
@@ -1314,7 +1321,7 @@ function soon(fn) {
 }
 
 // listenForBlocks refreshes the wallet the moment either chain has a new
-// block. On DogecoinVM a block is final once accepted, so a payment shows
+// block. On BTCVM a block is final once accepted, so a payment shows
 // as soon as it is final. The browser reconnects by itself if it drops.
 function listenForBlocks() {
   const stream = new EventSource('/api/events');
@@ -1322,14 +1329,14 @@ function listenForBlocks() {
     let chain;
     try { ({ chain } = JSON.parse(e.data)); } catch { return; }
     soon(refreshStatus);
-    if (chain === 'dogecoinvm') {
+    if (chain === 'btcvm') {
       soon(refreshWallet); // payments, and deposits being credited
       soon(refreshDeposits);
-    } else if (chain === 'dogecoin') {
-      soon(refreshDogeWallet);
+    } else if (chain === 'bitcoin') {
+      soon(refreshBTCWallet);
       soon(refreshDeposits); // confirmations counting up
     }
-    soon(refreshWithdrawalStatus); // final, paid, then in a Dogecoin block
+    soon(refreshWithdrawalStatus); // final, paid, then in a Bitcoin block
     if (!$('panel-withdraw').hidden) soon(renderWithdrawals);
   });
   return stream;

@@ -1,4 +1,4 @@
-// The explorer: bridge activity, proof of reserves, DogecoinVM blocks, and
+// The explorer: bridge activity, proof of reserves, BTCVM blocks, and
 // pages for a transaction, block or address. Pages are routed by the URL
 // hash (#/tx/<id>, #/block/<id>, #/address/<address>) so they can be linked.
 import * as chain from './chain.js';
@@ -17,7 +17,7 @@ async function api(path) {
   return data;
 }
 
-const tidy = (s) => chain.formatDoge(chain.parseDoge(String(s)));
+const tidy = (s) => chain.formatBTC(chain.parseBTC(String(s)));
 const short = (id) => `${id.slice(0, 8)}…${id.slice(-6)}`;
 
 function el(tag, attrs = {}, ...children) {
@@ -40,22 +40,22 @@ function ago(unix) {
   return `${days} day${days === 1 ? '' : 's'} ago`;
 }
 
-// Links: Dogecoin ids open on a public explorer, DogecoinVM ids in-page.
+// Links: Bitcoin ids open on a public explorer, BTCVM ids in-page.
 // The explorers are fixed here, not taken from the server, and ids are
 // checked before they go into a URL.
-const DOGE_EXPLORERS = {
-  mainnet: { tx: 'https://blockchair.com/dogecoin/transaction/', address: 'https://blockchair.com/dogecoin/address/' },
-  testnet: { tx: 'https://sochain.com/tx/DOGETEST/', address: 'https://sochain.com/address/DOGETEST/' },
+const BTC_EXPLORERS = {
+  mainnet: { tx: 'https://mempool.space/tx/', address: 'https://mempool.space/address/' },
+  testnet: { tx: 'https://mempool.space/testnet/tx/', address: 'https://mempool.space/testnet/address/' },
 };
 const isTxid = (s) => /^[0-9a-f]{64}$/.test(s);
 const isAddress = (s) => /^[1-9A-HJ-NP-Za-km-z]{25,40}$/.test(s);
 
-function dogeLink(kind, id, text) {
-  const base = (DOGE_EXPLORERS[info.dogecoinNetwork] || {})[kind];
+function btcLink(kind, id, text) {
+  const base = (BTC_EXPLORERS[info.bitcoinNetwork] || {})[kind];
   const ok = kind === 'tx' ? isTxid(id) : isAddress(id);
-  return base && ok ? el('a', { href: base + id, target: '_blank', rel: 'noopener noreferrer', class: 'chain-doge' }, text) : text;
+  return base && ok ? el('a', { href: base + id, target: '_blank', rel: 'noopener noreferrer', class: 'chain-btc' }, text) : text;
 }
-const dogeTx = (txid) => dogeLink('tx', txid, el('code', {}, short(txid)));
+const btcTx = (txid) => btcLink('tx', txid, el('code', {}, short(txid)));
 const vmTx = (txid) => el('a', { href: `#/tx/${txid}`, class: 'chain-vm' }, el('code', {}, short(txid)));
 const vmAddress = (addr) => el('a', { href: `#/address/${addr}`, class: 'chain-vm' }, el('code', {}, addr));
 const vmBlock = (h) => el('a', { href: `#/block/${h}`, class: 'chain-vm' }, `#${Number(h).toLocaleString('en-US')}`);
@@ -65,8 +65,8 @@ const vmBlock = (h) => el('a', { href: `#/block/${h}`, class: 'chain-vm' }, `#${
 function renderMove(e) {
   const done = e.status === 'credited' || e.status === 'paid';
   const statusText = {
-    credited: `Credited ${e.credited ? tidy(e.credited) : ''} DOGE`,
-    paid: `Paid ${e.pays ? tidy(e.pays) : ''} DOGE`,
+    credited: `Credited ${e.credited ? tidy(e.credited) : ''} BTC`,
+    paid: `Paid ${e.pays ? tidy(e.pays) : ''} BTC`,
     waiting: e.type === 'deposit'
       ? `${Math.min(e.confirmations ?? 0, e.required ?? 0)} of ${e.required} confirmations`
       : 'Waiting for the bridge',
@@ -77,22 +77,22 @@ function renderMove(e) {
   let from;
   let to;
   if (e.type === 'deposit') {
-    from = el('div', { class: 'side side-doge' },
-      el('span', { class: 'side-label' }, 'Dogecoin'), dogeTx(e.dogecoinTxid));
+    from = el('div', { class: 'side side-btc' },
+      el('span', { class: 'side-label' }, 'Bitcoin'), btcTx(e.bitcoinTxid));
     to = el('div', { class: 'side side-vm' },
-      el('span', { class: 'side-label' }, 'DogecoinVM'),
+      el('span', { class: 'side-label' }, 'BTCVM'),
       e.creditTxid ? vmTx(e.creditTxid) : el('span', { class: 'pending' }, 'not yet'));
   } else {
     from = el('div', { class: 'side side-vm' },
-      el('span', { class: 'side-label' }, 'DogecoinVM'), vmTx(e.dogecoinvmTxid));
-    to = el('div', { class: 'side side-doge' },
-      el('span', { class: 'side-label' }, 'Dogecoin'),
-      e.dogecoinTxid ? dogeTx(e.dogecoinTxid) : el('span', { class: 'pending' }, 'not yet'));
+      el('span', { class: 'side-label' }, 'BTCVM'), vmTx(e.btcvmTxid));
+    to = el('div', { class: 'side side-btc' },
+      el('span', { class: 'side-label' }, 'Bitcoin'),
+      e.bitcoinTxid ? btcTx(e.bitcoinTxid) : el('span', { class: 'pending' }, 'not yet'));
   }
   return el('li', { class: `move move-${e.type}` },
     el('div', { class: 'move-head' },
       el('span', { class: 'move-kind' }, e.type === 'deposit' ? 'Deposit' : 'Withdrawal'),
-      el('span', { class: 'amount move-amount' }, e.amount ? `${tidy(e.amount)} DOGE` : ''),
+      el('span', { class: 'amount move-amount' }, e.amount ? `${tidy(e.amount)} BTC` : ''),
       el('span', { class: 'move-time' }, ago(e.time))),
     el('div', { class: 'move-path' }, from, el('span', { class: 'arrow', 'aria-hidden': 'true' }, '→'), to),
     el('p', { class: `move-status ${done ? 'status-done' : 'status-waiting'}` }, statusText));
@@ -122,15 +122,15 @@ async function refreshReserves() {
   try {
     const r = await api('/api/reserves');
     if (unchanged('reserves', r)) return;
-    $('res-locked').textContent = `${tidy(r.lockedOnDogecoin)} DOGE`;
-    $('res-circulating').textContent = `${tidy(r.circulating)} DOGE`;
+    $('res-locked').textContent = `${tidy(r.lockedOnBitcoin)} BTC`;
+    $('res-circulating').textContent = `${tidy(r.circulating)} BTC`;
     const list = $('reserve-outputs');
-    list.replaceChildren(...r.dogecoinOutputs.map((o) =>
+    list.replaceChildren(...r.bitcoinOutputs.map((o) =>
       el('li', {},
-        dogeLink('tx', o.txid, el('code', {}, `${short(o.txid)}:${o.vout}`)),
+        btcLink('tx', o.txid, el('code', {}, `${short(o.txid)}:${o.vout}`)),
         el('span', { class: 'muted' }, `${Number(o.confirmations).toLocaleString('en-US')} conf.`),
-        el('span', { class: 'amount' }, `${tidy(o.amount)} DOGE`))));
-    if (!r.dogecoinOutputs.length) list.append(el('li', { class: 'empty' }, 'No DOGE is locked yet.'));
+        el('span', { class: 'amount' }, `${tidy(o.amount)} BTC`))));
+    if (!r.bitcoinOutputs.length) list.append(el('li', { class: 'empty' }, 'No BTC is locked yet.'));
   } catch { /* next poll */ }
 }
 
@@ -152,7 +152,7 @@ async function refreshBlocks() {
 // announce the new page.
 function page(gen, title, ...body) {
   if (gen !== routeGen) return;
-  document.title = `${title}: DogecoinVM explorer`;
+  document.title = `${title}: BTCVM explorer`;
   const heading = el('h2', { tabindex: '-1' }, title);
   $('explorer-view').replaceChildren(
     el('p', {}, el('a', { href: '#' }, '← Back to the explorer')),
@@ -166,21 +166,21 @@ function ioTable(rows) {
   return el('ul', { class: 'io' }, ...rows.map((r) => el('li', {},
     r.address ? vmAddress(r.address) : el('span', { class: 'muted' }, { 'bridge message': 'Bridge message', unknown: 'Unknown input' }[r.note] || 'No address'),
     r.note === 'peg reserve' ? el('span', { class: 'tag' }, 'peg reserve') : null,
-    r.value ? el('span', { class: 'amount' }, `${tidy(r.value)} DOGE`) : el('span', { class: 'muted' }, 'amount unknown'))));
+    r.value ? el('span', { class: 'amount' }, `${tidy(r.value)} BTC`) : el('span', { class: 'muted' }, 'amount unknown'))));
 }
 
 async function showTx(gen, txid) {
   loading(gen, 'Transaction');
   try {
     const t = await api(`/api/tx/${encodeURIComponent(txid)}`);
-    const other = t.dogecoinTxid ? el('p', {}, 'On Dogecoin: ', dogeTx(t.dogecoinTxid)) : null;
+    const other = t.bitcoinTxid ? el('p', {}, 'On Bitcoin: ', btcTx(t.bitcoinTxid)) : null;
     done(page(gen, 'Transaction',
       el('p', { class: `kind kind-${t.kind}` }, t.label),
       el('dl', { class: 'facts' },
         el('div', {}, el('dt', {}, 'ID'), el('dd', {}, el('code', {}, t.txid))),
         el('div', {}, el('dt', {}, 'Status'), el('dd', {}, t.confirmations > 0 ? `In a block, final (${t.confirmations} confirmation${t.confirmations === 1 ? '' : 's'})` : 'In the mempool')),
         t.time ? el('div', {}, el('dt', {}, 'Time'), el('dd', {}, new Date(t.time * 1000).toLocaleString())) : null,
-        t.fee ? el('div', {}, el('dt', {}, 'Fee'), el('dd', { class: 'amount' }, `${tidy(t.fee)} DOGE`)) : null),
+        t.fee ? el('div', {}, el('dt', {}, 'Fee'), el('dd', { class: 'amount' }, `${tidy(t.fee)} BTC`)) : null),
       other,
       el('div', { class: 'io-grid' },
         el('section', {}, el('h3', {}, 'From'), t.inputs.length ? ioTable(t.inputs) : el('p', { class: 'muted' }, 'Created by the block')),
@@ -216,11 +216,11 @@ async function showAddress(gen, addr) {
     const a = await api(`/api/address/${encodeURIComponent(addr)}`);
     done(page(gen, 'Address',
       el('p', { class: 'address address-vm' }, a.address),
-      el('p', { class: 'balance' }, el('span', { class: 'amount' }, tidy(a.confirmed)), ' ', el('span', { class: 'unit' }, 'DOGE')),
+      el('p', { class: 'balance' }, el('span', { class: 'amount' }, tidy(a.confirmed)), ' ', el('span', { class: 'unit' }, 'BTC')),
       el('h3', {}, 'Transactions'),
       el('ol', { class: 'tx-list' }, ...(a.history.length ? a.history.map((h) =>
         el('li', {}, vmTx(h.txid),
-          el('span', { class: 'amount' }, `${h.net.startsWith('-') ? '−' : '+'}${tidy(h.net.replace('-', ''))} DOGE`),
+          el('span', { class: 'amount' }, `${h.net.startsWith('-') ? '−' : '+'}${tidy(h.net.replace('-', ''))} BTC`),
           el('span', { class: 'move-time' }, h.confirmations > 0 ? '' : 'pending')))
         : [el('li', { class: 'empty' }, 'No transactions.')]))));
   } catch (err) {
@@ -238,7 +238,7 @@ function route() {
   if (!m) {
     view.hidden = true;
     front.forEach((n) => { n.hidden = false; });
-    document.title = 'DogecoinVM explorer';
+    document.title = 'BTCVM explorer';
     return;
   }
   view.hidden = false;
@@ -255,7 +255,7 @@ function route() {
 }
 
 // Search takes a txid or block hash (64 hex), a block height, or a
-// DogecoinVM address.
+// BTCVM address.
 async function search(q) {
   q = q.trim();
   if (/^[0-9a-f]{64}$/i.test(q)) {
@@ -273,7 +273,7 @@ async function start() {
   try {
     info = await api('/api/info');
   } catch {
-    info = {}; // Dogecoin links then show as plain text
+    info = {}; // Bitcoin links then show as plain text
   }
   $('search-form').addEventListener('submit', (e) => {
     e.preventDefault();

@@ -1,4 +1,4 @@
-// Passkey protection for the wallet key. A passkey can't sign Dogecoin
+// Passkey protection for the wallet key. A passkey can't sign Bitcoin
 // transactions (it uses a different curve), but with the WebAuthn PRF
 // extension it produces a secret only it can reproduce. The wallet key is
 // encrypted with that secret, so opening the wallet takes the passkey:
@@ -9,8 +9,8 @@
 // Keychain, Google Password Manager), backup plus passkey restore the wallet
 // on another device.
 
-const PREFIX = 'dogevm-passkey:v1:';
-const INFO = new TextEncoder().encode('dogevm wallet key v1');
+const PREFIX = 'btcvm-passkey:v1:';
+const INFO = new TextEncoder().encode('btcvm wallet key v1');
 
 const b64u = (bytes) => btoa(String.fromCharCode(...bytes)).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
 const unb64u = (s) => Uint8Array.from(atob(s.replace(/-/g, '+').replace(/_/g, '/')), (c) => c.charCodeAt(0));
@@ -76,8 +76,8 @@ export async function protect(key) {
     credential = await navigator.credentials.create({
       publicKey: {
         challenge: random(32),
-        rp: { name: 'DogecoinVM', id: location.hostname },
-        user: { id: random(16), name: 'DogecoinVM wallet', displayName: 'DogecoinVM wallet' },
+        rp: { name: 'BTCVM', id: location.hostname },
+        user: { id: random(16), name: 'BTCVM wallet', displayName: 'BTCVM wallet' },
         pubKeyCredParams: [{ type: 'public-key', alg: -7 }, { type: 'public-key', alg: -257 }],
         // The backup names the credential, so it need not be discoverable:
         // on a security key such as a YubiKey that saves one of its
@@ -111,7 +111,7 @@ export async function protect(key) {
 
 // unlock decrypts a backup with its passkey.
 export async function unlock(backup) {
-  if (!isBackup(backup)) throw new PasskeyError('That is not a DogecoinVM passkey backup.');
+  if (!isBackup(backup)) throw new PasskeyError('That is not a BTCVM passkey backup.');
   let parts;
   try {
     parts = JSON.parse(new TextDecoder().decode(unb64u(backup.trim().slice(PREFIX.length))));
