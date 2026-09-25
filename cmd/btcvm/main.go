@@ -440,7 +440,7 @@ func bridgeFlags(fs *flag.FlagSet) *bridge {
 	fs.Int64Var(&b.maxFeeRate, "max-fee-rate", 50, "highest fee rate a Bitcoin payout pays, in sat/vB; the fee comes out of the payout")
 	fs.DurationVar(&b.bumpAfter, "bump-after", 30*time.Minute, "replace a payout still unconfirmed after this long with one paying the current fee rate (0: never)")
 	fs.Int64Var(&b.minDeposit, "min-deposit", 10_000, "smallest deposit credited, in satoshis")
-	fs.Int64Var(&b.minPegOut, "min-peg-out", 30_000, "smallest peg-out paid, in satoshis; it must cover the network fee")
+	fs.Int64Var(&b.minPegOut, "min-peg-out", 50_000, "smallest peg-out paid, in satoshis; the network fee must be under half of it")
 	fs.Int64Var(&b.maxDeposit, "max-deposit", 0, "largest deposit credited, in satoshis; larger ones are held for refund (0: no cap)")
 	fs.Int64Var(&b.maxCirculating, "max-circulating", 0, "most BTC, in satoshis, the bridge lets circulate on BTCVM (0: no cap)")
 	fs.StringVar(&b.cosignersPath, "cosigners", "", "JSON list of remote signers, [{\"url\": ...}] (from btcvm signer-setup assemble)")
@@ -479,6 +479,9 @@ func (b *bridge) connect(s *settings, signers *signerSet) error {
 	}
 	b.confirmationTiers = tiers
 	if err := b.applyPolicy(signers.Policy); err != nil {
+		return err
+	}
+	if err := b.checkFeeRates(); err != nil {
 		return err
 	}
 	if b.cosignersPath != "" {

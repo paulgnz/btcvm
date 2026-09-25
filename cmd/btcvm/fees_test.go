@@ -1,6 +1,7 @@
 package main
 
 import (
+	"github.com/MetalBlockchain/btcvm/btcd/wire"
 	"testing"
 	"time"
 
@@ -181,4 +182,171 @@ func TestSignerRefusesBadReplacements(t *testing.T) {
 	require.NoError(err)
 	_, _, _, err = c.check(request(r.inputs, 40))
 	require.ErrorContains(err, "already done")
+}
+
+// TestSignerRefusesNeedlessInputs checks a coordinator can't spend a
+// payout on fees by adding peg outputs it doesn't need.
+func TestSignerRefusesNeedlessInputs(t *testing.T) {
+	require := require.New(t)
+	h := newCosignHarness(t)
+	for _, c := range h.signers {
+		c.b.minFeeRate, c.b.maxFeeRate = 1, 50
+	}
+	alice, aliceOnBTC := h.user(1), h.user(2)
+	for i := 0; i < 3; i++ {
+		h.deposit(10*btc, &alice, 6)
+		require.NotEmpty(h.step())
+		h.vm.mine()
+	}
+	req := h.pegOut(5*btc, aliceOnBTC)
+	s, err := h.b.load()
+	require.NoError(err)
+	p, ok := findPegOut(s.pegOuts, req.TxHash())
+	require.True(ok)
+	build := func(inputs []utxo) signRequest {
+		prev, _, err := s.pegSpends(inputs)
+		require.NoError(err)
+		tx := wire.NewMsgTx(2)
+		for _, u := range inputs {
+			in := wire.NewTxIn(&u.outPoint, nil, nil)
+			in.Sequence = wire.MaxTxInSequenceNum - 2
+			tx.AddTxIn(in)
+		}
+		// What buildPayout would make, were it not to refuse.
+		var total int64
+		for _, pr := range prev {
+			total += pr.value
+		}
+		tx.AddTxOut(wire.NewTxOut(p.value-50*400, p.dest.pkScript()))
+		tx.AddTxOut(wire.NewTxOut(total-p.value, h.b.signers.pkScript()))
+		tx.AddTxOut(nullData(encodePayment(p.txid)))
+		return signRequest{Chain: chainBitcoin, Action: action{Kind: actionPayout, PegOut: p.txid.String()}, Tx: encodeTx(tx), FeeRate: 50}
+	}
+	var confirmed []utxo
+	for _, u := range s.lockedUTXOs {
+		if u.confirmations > 0 {
+			confirmed = append(confirmed, u)
+		}
+	}
+	require.Len(confirmed, 3)
+	_, _, _, err = h.signers[0].check(build(confirmed))
+	require.ErrorContains(err, "does not need")
+
+	// The honest payout at the same rate is signed.
+	_, err = h.b.buildPayout(confirmed[:1], mustSpends(t, s, confirmed[:1]), p.value, p.dest, encodePayment(p.txid), 50)
+	require.NoError(err)
+}
+
+func mustSpends(t *testing.T, s *pegState, inputs []utxo) []spent {
+	prev, _, err := s.pegSpends(inputs)
+	require.NoError(t, err)
+	return prev
+}
+
+// TestSignerNeverRefundsACreditedDeposit: after a policy change makes a
+// credited deposit look held (here, a higher minimum), a refund of it is
+// still refused.
+func TestSignerNeverRefundsACreditedDeposit(t *testing.T) {
+	require := require.New(t)
+	h := newCosignHarness(t)
+	alice := h.user(1)
+	dep := h.deposit(3*btc, &alice, 6)
+	h.deposit(50*btc, &alice, 6) // something to pay a refund from
+	require.NotEmpty(h.step())
+	h.vm.mine()
+	require.NotEmpty(h.step())
+	h.vm.mine()
+
+	op := wire.OutPoint{Hash: dep.TxHash()}
+	c := h.signers[0]
+	c.b.minDeposit = 5 * btc
+	s, err := c.b.load()
+	require.NoError(err)
+	_, held := findDeposit(s.held, op)
+	require.True(held, "the credited deposit now looks held")
+
+	back := h.user(9)
+	req := signRequest{Chain: chainBitcoin, FeeRate: 10, Action: refundAction(op, back)}
+	var confirmed []utxo
+	for _, u := range s.lockedUTXOs {
+		if u.confirmations > 0 && u.value >= 3*btc {
+			confirmed = append(confirmed, u)
+			break
+		}
+	}
+	prev, _, err := s.pegSpends(confirmed)
+	require.NoError(err)
+	tx, err := h.b.buildPayout(confirmed, prev, 3*btc, back, encodeRefund(op), 10)
+	require.NoError(err)
+	req.Tx = encodeTx(tx)
+	_, _, _, err = c.check(req)
+	require.ErrorContains(err, "was credited")
+}
+
+// TestPayoutToADepositAddressIsCredited: a withdrawal paid to a personal
+// deposit address is a deposit to it, credited again, not stranded.
+func TestPayoutToADepositAddressIsCredited(t *testing.T) {
+	require := require.New(t)
+	h := newHarness(t)
+	alice := h.user(1)
+	_, err := h.b.registry.add(alice)
+	require.NoError(err)
+	h.personalDeposit(100*btc, alice, 6)
+	require.NotEmpty(h.step())
+	h.vm.mine()
+
+	depositAddr, err := h.b.signers.depositAddress(alice, h.b.btcParams)
+	require.NoError(err)
+	back, err := destinationOf(depositAddr)
+	require.NoError(err)
+	h.pegOut(40*btc, back)
+	require.NotEmpty(h.step())
+	for i := 0; i < 6; i++ {
+		h.btc.mine()
+	}
+	require.NotEmpty(h.step(), "the payout is credited as a deposit")
+	h.vm.mine()
+	a := h.audit()
+	require.True(a.solvent(), "%+v", a)
+	require.Zero(a.PendingPegIns)
+	// The latest credit to Alice is the withdrawal, less the network fee
+	// and the bridge fee.
+	payout := h.btc.txs[len(h.btc.txs)-1].tx
+	require.Equal(40*btc-h.feeOf(payout)-h.b.vmFee, paidTo(h.vm, alice))
+	require.Equal(int64(100*btc-h.feeOf(payout)), a.Circulating)
+}
+
+// TestPegOutToThePegAddressIsRefused: it would look like change.
+func TestPegOutToThePegAddressIsRefused(t *testing.T) {
+	h := newHarness(t)
+	alice := h.user(1)
+	h.deposit(100*btc, &alice, 6)
+	require.NotEmpty(t, h.step())
+	h.vm.mine()
+	h.pegOut(40*btc, h.b.signers.destination())
+	require.Empty(t, h.step())
+	require.Equal(t, int64(40*btc), h.audit().UnclaimedOnVM)
+}
+
+// TestOneStuckPayoutDoesNotBlockTheRest: a peg-out whose fee is too high
+// to pay now waits, and the next one is still paid.
+func TestOneStuckPayoutDoesNotBlockTheRest(t *testing.T) {
+	require := require.New(t)
+	h := newHarness(t)
+	h.b.minPegOut = 1000
+	alice := h.user(1)
+	h.deposit(100*btc, &alice, 6)
+	require.NotEmpty(h.step())
+	h.vm.mine()
+
+	h.pegOut(2000, h.user(2)) // at 10 sat/vB the fee is more than half
+	h.pegOut(btc, h.user(3))
+	did, err := h.b.step()
+	require.NoError(err)
+	require.Contains(did, "paid")
+	require.Equal(btc-h.feeOf(h.lastBTC()), paidTo(h.btc, h.user(3)))
+
+	h.btc.mine()
+	_, err = h.b.step()
+	require.ErrorContains(err, "more than half", "the small one waits, and says why")
 }

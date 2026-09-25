@@ -34,7 +34,7 @@ func freePort(t *testing.T) int {
 	return l.Addr().(*net.TCPAddr).Port
 }
 
-func startRegtest(t *testing.T) *regtestNode {
+func startRegtest(t *testing.T, extra ...string) *regtestNode {
 	bitcoind, err := exec.LookPath("bitcoind")
 	if err != nil {
 		t.Skip("bitcoind is not installed")
@@ -44,9 +44,10 @@ func startRegtest(t *testing.T) *regtestNode {
 	_, _ = rand.Read(secret[:])
 	pass := hex.EncodeToString(secret[:])
 	rpcPort := freePort(t)
-	cmd := exec.Command(bitcoind, "-regtest", "-datadir="+dir, "-txindex", "-acceptnonstdtxn=0",
-		"-listen=0", fmt.Sprintf("-rpcport=%d", rpcPort), "-rpcuser=test", "-rpcpassword="+pass,
-		"-fallbackfee=0.0002", "-printtoconsole=0")
+	args := append([]string{"-regtest", "-datadir=" + dir, "-txindex", "-acceptnonstdtxn=0",
+		"-listen=0", fmt.Sprintf("-rpcport=%d", rpcPort), "-rpcuser=test", "-rpcpassword=" + pass,
+		"-fallbackfee=0.0002", "-printtoconsole=0"}, extra...)
+	cmd := exec.Command(bitcoind, args...)
 	require.NoError(t, cmd.Start())
 	t.Cleanup(func() {
 		_ = cmd.Process.Kill()
@@ -248,4 +249,15 @@ func TestSeparateSignersWithBitcoinCore(t *testing.T) {
 		require.NoError(err)
 		require.Equal(int64(btc/4-btc/10), c.b.audit(s).Locked, "each signer sees the peg on its own node")
 	}
+}
+
+// TestBridgeRefusesNodeWithoutTxIndex checks the bridge won't read the peg
+// from a Bitcoin Core without -txindex: it could not see every payout, and
+// signers could then pay one twice.
+func TestBridgeRefusesNodeWithoutTxIndex(t *testing.T) {
+	n := startRegtest(t, "-txindex=0")
+	c := &btcChain{rpc: n.settings.btcRPCClient()}
+	require.NoError(t, c.ensureWallet())
+	_, err := c.txsFor(nil)
+	require.ErrorContains(t, err, "-txindex")
 }

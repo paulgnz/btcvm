@@ -234,6 +234,9 @@ func (b *bridge) load() (*pegState, error) {
 				continue // not final yet
 			}
 			dest, ok := parseDestinationTag(t.tx, tagPegOut)
+			// A payout to the peg address itself would look like change on
+			// Bitcoin, so it is never made.
+			ok = ok && !bytes.Equal(dest.pkScript(), script)
 			p := pegOut{time: t.time, txid: t.tx.TxHash(), value: paidIn, dest: dest,
 				valid: ok && paidIn >= b.minPegOut, confirmations: t.confirmations}
 			if p.valid {
@@ -290,15 +293,33 @@ func (b *bridge) load() (*pegState, error) {
 		if spendsAny(t.tx, pegOuts) {
 			// Only the signers can spend peg outputs; outputs back to the
 			// peg are change, not deposits.
+			hash := t.tx.TxHash()
+			if t.confirmations == 0 {
+				s.unconfirmed[hash] = t
+			}
+			// If an action has two transactions listed, one replacing the
+			// other, the one in a block is the one that counts.
+			counts := func(prev chainhash.Hash, listed bool) bool {
+				_, prevPending := s.unconfirmed[prev]
+				return !listed || (prevPending && t.confirmations > 0)
+			}
 			if request, ok := parsePayment(t.tx); ok {
-				s.paid[request] = t.tx.TxHash()
-				s.paidAmount[request] = t.tx.TxOut[0].Value
+				if prev, listed := s.paid[request]; counts(prev, listed) {
+					s.paid[request] = hash
+					s.paidAmount[request] = t.tx.TxOut[0].Value
+				}
 			}
 			if deposit, ok := parseRefund(t.tx); ok {
-				s.refunded[deposit] = t.tx.TxHash()
+				if prev, listed := s.refunded[deposit]; counts(prev, listed) {
+					s.refunded[deposit] = hash
+				}
 			}
-			if t.confirmations == 0 {
-				s.unconfirmed[t.tx.TxHash()] = t
+			// A payout to a personal deposit address is a deposit to it.
+			for i, out := range t.tx.TxOut {
+				if dest, personal := depositDest[string(out.PkScript)]; personal {
+					all = append(all, deposit{time: t.time, outPoint: wire.OutPoint{Hash: hash, Index: uint32(i)},
+						value: out.Value, dest: dest, valid: b.depositInRange(out.Value), confirmations: t.confirmations})
+				}
 			}
 			continue
 		}
@@ -333,15 +354,23 @@ func (b *bridge) load() (*pegState, error) {
 			s.deposits = append(s.deposits, d)
 		default:
 			s.held = append(s.held, d)
-			s.unclaimedOnBTC += d.value
+			if d.confirmations > 0 {
+				s.unclaimedOnBTC += d.value
+			}
 		}
 	}
 	s.lockedUTXOs, err = b.btc.unspent(btcAddrs, 0)
 	if err != nil {
 		return nil, fmt.Errorf("reading Bitcoin peg addresses: %w", err)
 	}
+	// Locked BTC is what's in a block, plus the change of the signers' own
+	// unconfirmed spends. An unconfirmed payment from anyone else can still
+	// be double-spent, so it counts for nothing yet, on either side of the
+	// audit: deposits count once they confirm.
 	for _, u := range s.lockedUTXOs {
-		s.locked += u.value
+		if _, own := s.unconfirmed[u.outPoint.Hash]; u.confirmations > 0 || own {
+			s.locked += u.value
+		}
 	}
 
 	// Oldest first, so the bridge works through them in order.
@@ -362,7 +391,7 @@ func (b *bridge) audit(s *pegState) audit {
 		UnclaimedOnVM:  s.unclaimedOnVM,
 	}
 	for _, d := range s.deposits {
-		if _, done := s.released[d.outPoint]; !done {
+		if _, done := s.released[d.outPoint]; !done && d.confirmations > 0 {
 			a.PendingPegIns += d.value
 		}
 	}
@@ -392,6 +421,7 @@ func (b *bridge) step() (string, error) {
 		return "", fmt.Errorf("%w (%+v)", errInsolvent, a)
 	}
 
+	var failed error
 	// Releases chain off each other's reserve change, so wait for the
 	// previous one to be accepted.
 	if !s.vmPending {
@@ -406,7 +436,10 @@ func (b *bridge) step() (string, error) {
 			}
 			txid, err := b.release(s, d)
 			if err != nil {
-				return "", fmt.Errorf("releasing deposit %v: %w", d.outPoint, err)
+				// Go on to the next: one that can't be credited mustn't
+				// hold up the rest.
+				failed = errors.Join(failed, fmt.Errorf("releasing deposit %v: %w", d.outPoint, err))
+				continue
 			}
 			return fmt.Sprintf("credited %s BTC for deposit %v in %v",
 				formatBTC(d.value-b.vmFee), d.outPoint, txid), nil
@@ -419,12 +452,17 @@ func (b *bridge) step() (string, error) {
 		}
 		txid, pays, err := b.pay(s, p)
 		if err != nil {
-			return "", fmt.Errorf("paying peg-out %v: %w", p.txid, err)
+			failed = errors.Join(failed, fmt.Errorf("paying peg-out %v: %w", p.txid, err))
+			continue
 		}
 		return fmt.Sprintf("paid %s BTC for peg-out %v in %v",
 			formatBTC(pays), p.txid, txid), nil
 	}
-	return b.bumpStuck(s)
+	did, err := b.bumpStuck(s)
+	if did != "" {
+		return did, nil
+	}
+	return "", errors.Join(failed, err)
 }
 
 // selectUTXOs picks outputs, largest first, until they cover amount.
@@ -504,6 +542,14 @@ func (b *bridge) reserveSpends(inputs []utxo) []spent {
 func (b *bridge) pay(s *pegState, p pegOut) (chainhash.Hash, int64, error) {
 	return b.payFromPeg(s, p.value, p.dest, encodePayment(p.txid),
 		action{Kind: actionPayout, PegOut: p.txid.String()})
+}
+
+// checkFeeRates checks the fee rate bounds make sense.
+func (b *bridge) checkFeeRates() error {
+	if b.minFeeRate < 1 || b.maxFeeRate < b.minFeeRate {
+		return fmt.Errorf("fee rates must satisfy 1 <= -min-fee-rate (%d) <= -max-fee-rate (%d)", b.minFeeRate, b.maxFeeRate)
+	}
+	return nil
 }
 
 // currentFeeRate is the rate a payout pays now, within the bounds.
@@ -593,6 +639,13 @@ func (b *bridge) buildPayout(inputs []utxo, prev []spent, value int64, dest dest
 	if total < value {
 		return nil, fmt.Errorf("inputs hold %s BTC, need %s", formatBTC(total), formatBTC(value))
 	}
+	// Every input must be needed: each one adds to the fee, which comes
+	// out of the payout, so extra inputs would spend the user's BTC on fees.
+	for i := range prev {
+		if total-prev[i].value >= value {
+			return nil, fmt.Errorf("spends %v, which the payout does not need", inputs[i].outPoint)
+		}
+	}
 	tx.AddTxOut(wire.NewTxOut(0, dest.pkScript())) // value set below
 	// Change too small to relay goes to the fee.
 	if change := total - value; change >= bitcoinDust {
@@ -601,8 +654,9 @@ func (b *bridge) buildPayout(inputs []utxo, prev []spent, value int64, dest dest
 	tx.AddTxOut(nullData(data))
 	fee := feeRate * b.signers.witnessVSize(tx, scriptSizes)
 	pays := value - fee
-	if pays < bitcoinDust {
-		return nil, fmt.Errorf("%s BTC does not cover the %s BTC network fee", formatBTC(value), formatBTC(fee))
+	if pays < bitcoinDust || fee > value/2 {
+		return nil, fmt.Errorf("the %s BTC network fee at %d sat/vB would take more than half of %s BTC; waiting for lower fees",
+			formatBTC(fee), feeRate, formatBTC(value))
 	}
 	tx.TxOut[0].Value = pays
 	return tx, nil
@@ -644,9 +698,10 @@ type prevOutSource interface {
 // replacement is an unconfirmed payment or refund, and the peg outputs it
 // spends, which a new transaction paying a higher fee can spend instead.
 type replacement struct {
-	tx     *wire.MsgTx
-	inputs []utxo
-	prev   []spent
+	tx       *wire.MsgTx
+	inputs   []utxo
+	prev     []spent
+	register []destination // personal deposit destinations among the inputs
 }
 
 // replaceable returns the unconfirmed transaction txid. It fails if the
@@ -673,7 +728,7 @@ func (b *bridge) replaceable(s *pegState, txid chainhash.Hash) (*replacement, er
 		r.inputs = append(r.inputs, utxo{outPoint: in.PreviousOutPoint, value: out.Value, pkScript: out.PkScript, confirmations: 1})
 	}
 	var err error
-	if r.prev, _, err = s.pegSpends(r.inputs); err != nil {
+	if r.prev, r.register, err = s.pegSpends(r.inputs); err != nil {
 		return nil, err
 	}
 	return r, nil
@@ -730,14 +785,14 @@ func (b *bridge) bumpStuck(s *pegState) (string, error) {
 			continue
 		}
 		why, value, dest, data, ok := s.actionOf(t.tx)
-		if !ok {
-			continue
+		if !ok || s.doneBy(why) != txid {
+			continue // not what the action currently counts as done by
 		}
 		tx, err := b.buildPayout(r.inputs, r.prev, value, dest, data, rate)
 		if err != nil {
 			return "", fmt.Errorf("bumping %v: %w", txid, err)
 		}
-		p := &proposal{Chain: chainBitcoin, Action: why, tx: tx, prev: r.prev, FeeRate: rate}
+		p := &proposal{Chain: chainBitcoin, Action: why, tx: tx, prev: r.prev, Register: r.register, FeeRate: rate}
 		if err := b.authorize(p); err != nil {
 			return "", fmt.Errorf("bumping %v: %w", txid, err)
 		}
@@ -748,6 +803,21 @@ func (b *bridge) bumpStuck(s *pegState) (string, error) {
 		return fmt.Sprintf("replaced %v (%d sat/vB) with %v (%d sat/vB)", txid, old, newID, rate), nil
 	}
 	return "", nil
+}
+
+// doneBy is the transaction a payout or refund is done by, if any.
+func (s *pegState) doneBy(a action) chainhash.Hash {
+	switch a.Kind {
+	case actionPayout:
+		if txid, err := chainhash.NewHashFromStr(a.PegOut); err == nil {
+			return s.paid[*txid]
+		}
+	case actionRefund:
+		if op, err := parseOutPoint(a.Deposit); err == nil {
+			return s.refunded[op]
+		}
+	}
+	return chainhash.Hash{}
 }
 
 // actionOf reads what a peg payment or refund on Bitcoin was for: its

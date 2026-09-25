@@ -417,6 +417,9 @@ func setupAssemble(args []string) error {
 		return fmt.Errorf("-confirmation-tiers: %w", err)
 	}
 	b.confirmationTiers = tiers
+	if err := b.checkFeeRates(); err != nil {
+		return err
+	}
 	p := newPrompter(*yes)
 
 	set := &signerSet{

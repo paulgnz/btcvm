@@ -1199,6 +1199,9 @@ $('withdraw-form').addEventListener('submit', async (e) => {
   try {
     const toText = $('withdraw-to').value.trim();
     const to = chain.decodeAddress(toText, info.bitcoinVersions);
+    if (chain.encodeAddress(to, info.bitcoinVersions) === info.pegAddress) {
+      throw new Error("That's the bridge's own address. Withdraw to a Bitcoin address of yours.");
+    }
     const amount = chain.parseBTC($('withdraw-amount').value);
     if (amount < chain.parseBTC(info.minPegOut)) throw new Error(`The minimum withdrawal is ${tidy(info.minPegOut)} BTC.`);
     const reserve = chain.decodeAddress(info.reserveAddress, info.btcvmVersions);

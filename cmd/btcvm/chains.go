@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"math"
 	"strings"
+	"sync/atomic"
 
 	"github.com/MetalBlockchain/btcvm/btcd/btcutil"
 	"github.com/MetalBlockchain/btcvm/btcd/chaincfg/chainhash"
@@ -170,7 +171,8 @@ func sendRaw(rpc *rpcClient, tx *wire.MsgTx) (chainhash.Hash, error) {
 // watch-only descriptor wallet (ensureWallet) that holds the addresses the
 // bridge watches. The node needs -txindex.
 type btcChain struct {
-	rpc *rpcClient // the wallet's endpoint, .../wallet/NAME
+	rpc     *rpcClient // the wallet's endpoint, .../wallet/NAME
+	indexed atomic.Bool
 }
 
 // walletName is the wallet part of an RPC URL ending in /wallet/NAME.
@@ -287,6 +289,9 @@ func (c *btcChain) prevOut(op wire.OutPoint) (*wire.TxOut, bool, error) {
 }
 
 func (c *btcChain) txsFor(addresses []btcutil.Address) ([]chainTx, error) {
+	if err := c.requireTxIndex(); err != nil {
+		return nil, err
+	}
 	scripts := scriptSet(addresses)
 	var entries []struct {
 		TxID    string `json:"txid"`
@@ -324,7 +329,11 @@ func (c *btcChain) txsFor(addresses []btcutil.Address) ([]chainTx, error) {
 		if err != nil {
 			return nil, err
 		}
-		if touches(tx, scripts, c) {
+		ok, err := touches(tx, scripts, c)
+		if err != nil {
+			return nil, err
+		}
+		if ok {
 			txs = append(txs, chainTx{tx: tx, confirmations: t.Confirmations, time: t.Time})
 		}
 	}
@@ -332,27 +341,59 @@ func (c *btcChain) txsFor(addresses []btcutil.Address) ([]chainTx, error) {
 }
 
 // touches reports whether tx pays to one of scripts or spends an output
-// paying to one.
-func touches(tx *wire.MsgTx, scripts map[string]bool, c *btcChain) bool {
+// paying to one. The wallet lists only transactions that do one or the
+// other, so a transaction whose inputs can't be read fails rather than
+// being dropped: dropping a peg payout would hide that it was paid.
+func touches(tx *wire.MsgTx, scripts map[string]bool, c *btcChain) (bool, error) {
 	for _, out := range tx.TxOut {
 		if scripts[string(out.PkScript)] {
-			return true
+			return true, nil
 		}
 	}
 	for _, in := range tx.TxIn {
+		if in.PreviousOutPoint.Hash == (chainhash.Hash{}) {
+			continue // a coinbase
+		}
 		// Needs Bitcoin Core's -txindex for outputs the wallet did not
-		// create.
+		// create; requireTxIndex checks it is on.
 		var prevHex string
 		if err := c.rpc.call(&prevHex, "getrawtransaction", in.PreviousOutPoint.Hash.String(), 0); err != nil {
-			continue
+			return false, fmt.Errorf("reading %v, which wallet transaction %v spends: %w", in.PreviousOutPoint.Hash, tx.TxHash(), err)
 		}
 		prevTx, err := decodeTx(prevHex)
-		if err == nil && int(in.PreviousOutPoint.Index) < len(prevTx.TxOut) &&
+		if err != nil {
+			return false, err
+		}
+		if int(in.PreviousOutPoint.Index) < len(prevTx.TxOut) &&
 			scripts[string(prevTx.TxOut[in.PreviousOutPoint.Index].PkScript)] {
-			return true
+			return true, nil
 		}
 	}
-	return false
+	return false, nil
+}
+
+// requireTxIndex fails unless Bitcoin Core runs with a synced -txindex,
+// which reading the peg's spends depends on. Once it has passed it is not
+// asked again.
+func (c *btcChain) requireTxIndex() error {
+	if c.indexed.Load() {
+		return nil
+	}
+	var info map[string]struct {
+		Synced bool `json:"synced"`
+	}
+	if err := c.rpc.call(&info, "getindexinfo"); err != nil {
+		return err
+	}
+	idx, ok := info["txindex"]
+	switch {
+	case !ok:
+		return errors.New("Bitcoin Core must run with -txindex")
+	case !idx.Synced:
+		return errors.New("Bitcoin Core is still building its transaction index (-txindex)")
+	}
+	c.indexed.Store(true)
+	return nil
 }
 
 func (c *btcChain) unspent(addresses []btcutil.Address, minConf int64) ([]utxo, error) {

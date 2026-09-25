@@ -523,6 +523,9 @@ func (c *cosigner) check(req signRequest) (*wire.MsgTx, []spent, int64, error) {
 		if txid, done := s.released[op]; done {
 			return nil, nil, 0, fmt.Errorf("deposit %v was already credited in %v", op, txid)
 		}
+		if txid, done := s.refunded[op]; done {
+			return nil, nil, 0, fmt.Errorf("deposit %v was refunded in %v", op, txid)
+		}
 		d, ok := findDeposit(s.deposits, op)
 		if !ok {
 			return nil, nil, 0, fmt.Errorf("no creditable deposit %v in this signer's view", op)
@@ -585,7 +588,11 @@ func (c *cosigner) check(req signRequest) (*wire.MsgTx, []spent, int64, error) {
 			if err != nil {
 				return nil, nil, 0, err
 			}
-			// Signers only refund deposits the bridge will never credit.
+			// Signers only refund deposits the bridge will never credit,
+			// and never one it has.
+			if txid, done := s.released[op]; done {
+				return nil, nil, 0, fmt.Errorf("deposit %v was credited in %v", op, txid)
+			}
 			held := s.held
 			if r != nil {
 				held = s.settled // refunded, by the transaction r replaces
