@@ -186,3 +186,66 @@ func TestBridgeWithBitcoinCore(t *testing.T) {
 	require.Zero(a.PendingPegOuts)
 	require.Equal(int64(btc/2-btc/5), a.Circulating)
 }
+
+// TestSeparateSignersWithBitcoinCore has three signers, each with its own
+// Bitcoin Core wallet, sign a round trip for a coordinator holding no keys.
+// The signers are not told of the deposit address until the release that
+// needs it, so each must import the deposit it missed (importprunedfunds)
+// from its own node.
+func TestSeparateSignersWithBitcoinCore(t *testing.T) {
+	require := require.New(t)
+	n := startRegtest(t)
+
+	h := newCosignHarness(t)
+	wallet := func(name string) *btcChain {
+		s := n.settings
+		s.btcWallet = name
+		c := &btcChain{rpc: s.btcRPCClient()}
+		require.NoError(c.ensureWallet())
+		return c
+	}
+	setup := func(b *bridge, c *btcChain) {
+		b.btc, b.btcParams = c, &chaincfg.RegressionNetParams
+		b.minFeeRate, b.maxFeeRate = 1, 100
+		b.minDeposit, b.minPegOut = 10_000, 30_000
+	}
+	setup(h.b, wallet("btcvm"))
+	h.b.feeRate = func() (int64, error) { return 3, nil }
+	for i, c := range h.signers {
+		setup(c.b, wallet(fmt.Sprintf("signer%d", i)))
+		require.NoError(watchPeg(c.b, false))
+	}
+	require.NoError(watchPeg(h.b, false))
+
+	// The coordinator registers Alice's address without telling the
+	// signers, as if they were offline.
+	cosigners := h.b.cosigners
+	h.b.cosigners = nil
+	alice := h.user(1)
+	depositAddr, err := registerDeposit(h.b, alice)
+	require.NoError(err)
+	h.b.cosigners = cosigners
+
+	require.NoError(n.funder.call(nil, "sendtoaddress", depositAddr.EncodeAddress(), 0.25))
+	n.mine(6)
+	require.NotEmpty(h.step(), "signers caught up on the deposit and signed")
+	require.Equal(btc/4-h.b.vmFee, paidTo(h.vm, alice))
+	h.vm.mine()
+
+	aliceOnBTC := n.newAddress()
+	h.pegOut(btc/10, aliceOnBTC)
+	did, err := h.b.step()
+	require.NoError(err)
+	require.Contains(did, "paid")
+	n.mine(1)
+	require.Empty(h.step())
+
+	a := h.audit()
+	require.True(a.solvent(), "%+v", a)
+	require.Zero(a.PendingPegOuts)
+	for _, c := range h.signers {
+		s, err := c.b.load()
+		require.NoError(err)
+		require.Equal(int64(btc/4-btc/10), c.b.audit(s).Locked, "each signer sees the peg on its own node")
+	}
+}
