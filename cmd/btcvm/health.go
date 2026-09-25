@@ -225,35 +225,50 @@ func postTelegram(token, chatID, msg string) error {
 }
 
 // monitor runs the checks every interval and alerts when a check changes
-// state, and again every remind while one is failing.
+// state, and again every remind while one is failing. A check counts as
+// failing only after failing failAfter runs in a row, so one slow answer
+// (Bitcoin Core busy adding blocks, say) doesn't page anyone; a recovery is
+// announced only if the failure was.
 func (h *healthChecker) monitor(interval, remind time.Duration, alert alerter) {
-	last := map[string]bool{}
+	const failAfter = 2
+	reported := map[string]bool{} // each check's state as last announced
+	failures := map[string]int{}  // consecutive failing runs
 	var lastAlert time.Time
 	for {
 		state, err := h.b.load()
 		checks := h.run(state, err)
 
 		var changed []string
+		var failing []check
 		for _, c := range checks {
-			if prev, seen := last[c.Name]; !seen || prev != c.OK {
+			if c.OK {
+				failures[c.Name] = 0
+			} else {
+				failures[c.Name]++
+			}
+			ok := c.OK || failures[c.Name] < failAfter
+			if !ok {
+				failing = append(failing, c)
+			}
+			if prev, seen := reported[c.Name]; (!seen && !ok) || (seen && prev != ok) {
 				status := "OK"
-				if !c.OK {
+				if !ok {
 					status = "FAILING"
 				}
-				if seen || !c.OK {
-					changed = append(changed, fmt.Sprintf("%s %s: %s", c.Name, status, c.Detail))
-				}
+				changed = append(changed, fmt.Sprintf("%s %s: %s", c.Name, status, c.Detail))
 			}
-			last[c.Name] = c.OK
+			if _, seen := reported[c.Name]; seen || !ok {
+				reported[c.Name] = ok
+			}
 		}
 		for _, c := range checks {
 			log.Printf("%-10s ok=%-5t %s", c.Name, c.OK, c.Detail)
 		}
 
-		reminder := !allOK(checks) && time.Since(lastAlert) > remind
+		reminder := len(failing) > 0 && time.Since(lastAlert) > remind
 		if len(changed) > 0 || reminder {
 			msg := "BTCVM bridge: "
-			if allOK(checks) {
+			if len(failing) == 0 {
 				msg += "all checks OK"
 			} else {
 				msg += "a check is failing"
@@ -262,10 +277,8 @@ func (h *healthChecker) monitor(interval, remind time.Duration, alert alerter) {
 				msg += "\n- " + line
 			}
 			if len(changed) == 0 {
-				for _, c := range checks {
-					if !c.OK {
-						msg += "\n- still failing: " + c.Name + ": " + c.Detail
-					}
+				for _, c := range failing {
+					msg += "\n- still failing: " + c.Name + ": " + c.Detail
 				}
 			}
 			log.Print(msg)
