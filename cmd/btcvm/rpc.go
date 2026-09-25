@@ -57,6 +57,17 @@ func (c *rpcClient) call(result any, method string, params ...any) error {
 	if params == nil {
 		params = []any{}
 	}
+	return c.do(result, method, params)
+}
+
+// callNamed invokes method with named parameters, which Bitcoin Core
+// accepts; it keeps a call working when a later release drops or adds a
+// positional parameter before the ones it sets.
+func (c *rpcClient) callNamed(result any, method string, params map[string]any) error {
+	return c.do(result, method, params)
+}
+
+func (c *rpcClient) do(result any, method string, params any) error {
 	body, err := json.Marshal(map[string]any{
 		"jsonrpc": "1.0",
 		"id":      c.nextID.Add(1),

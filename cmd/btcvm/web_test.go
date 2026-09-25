@@ -3,6 +3,7 @@ package main
 import (
 	"encoding/hex"
 	"encoding/json"
+	"github.com/MetalBlockchain/btcvm/btcd/chaincfg"
 	"io/fs"
 	"os"
 	"os/exec"
@@ -33,14 +34,14 @@ func TestWebChainMatchesGo(t *testing.T) {
 	require := require.New(t)
 
 	vmParams, _ := btcvmParams("testnet")
-	btcParams := &bitcoinTestNet
+	btcParams := &chaincfg.TestNet3Params
 	signers, err := newSignerSet(2, 3)
 	require.NoError(err)
 
 	key, _ := btcec.PrivKeyFromBytes([]byte("0123456789abcdef0123456789abcdef"))
 	report, err := describeKey(key, vmParams, btcParams)
 	require.NoError(err)
-	vmAddr, err := p2pkhAddress(key, vmParams)
+	vmAddr, err := keyAddress(key, vmParams)
 	require.NoError(err)
 	dest, err := destinationOf(vmAddr)
 	require.NoError(err)
@@ -50,7 +51,7 @@ func TestWebChainMatchesGo(t *testing.T) {
 	// A UTXO of 500 BTC the key owns, paid on to the peg reserve with a
 	// BVMO tag, as the Withdraw tab does.
 	fromScript := destinationScript(vmAddr)
-	btcDest := destination{kind: destP2PKH, hash: [20]byte{9}}
+	btcDest := destination{kind: destP2PKH, hash: [32]byte{9}}
 
 	// The transaction that created the UTXO; the page fetches it to check
 	// the UTXO's value.

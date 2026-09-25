@@ -73,7 +73,7 @@ func (r *depositRegistry) add(d destination) (bool, error) {
 
 	entries := make([]string, len(dests))
 	for i, d := range dests {
-		entries[i] = hex.EncodeToString(append([]byte{d.kind}, d.hash[:]...))
+		entries[i] = hex.EncodeToString(d.bytes())
 	}
 	raw, err := json.MarshalIndent(entries, "", "  ")
 	if err != nil {

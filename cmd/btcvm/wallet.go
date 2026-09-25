@@ -14,13 +14,9 @@ import (
 	"github.com/MetalBlockchain/btcvm/btcd/wire"
 )
 
-// walletFeePerByte is Bitcoin's recommended 0.01 BTC/kB, ten times the
-// minimum relay fee, so wallet transactions relay on either chain.
-const walletFeePerByte = 1000
-
-// softDust is Bitcoin's soft dust limit: outputs below it cost an extra
-// 0.01 BTC in fees, so the wallet never creates change that small.
-const softDust = satPerBTC / 100
+// walletFeeRate is the fee rate, in sat/vB, the command-line wallet pays
+// on BTCVM: twice the minimum relay fee.
+const walletFeeRate = 2
 
 func newKey() (*btcec.PrivateKey, error) {
 	var secret [32]byte
@@ -53,7 +49,7 @@ func describeKey(key *btcec.PrivateKey, vmParams, btcParams *chaincfg.Params) (k
 		if err != nil {
 			return r, err
 		}
-		addr, err := p2pkhAddress(key, enc.params)
+		addr, err := keyAddress(key, enc.params)
 		if err != nil {
 			return r, err
 		}
@@ -62,8 +58,10 @@ func describeKey(key *btcec.PrivateKey, vmParams, btcParams *chaincfg.Params) (k
 	return r, nil
 }
 
-func p2pkhAddress(key *btcec.PrivateKey, params *chaincfg.Params) (*btcutil.AddressPubKeyHash, error) {
-	return btcutil.NewAddressPubKeyHash(btcutil.Hash160(key.PubKey().SerializeCompressed()), params)
+// keyAddress is key's native SegWit (P2WPKH, bc1q...) address, the
+// wallet's default on both chains.
+func keyAddress(key *btcec.PrivateKey, params *chaincfg.Params) (*btcutil.AddressWitnessPubKeyHash, error) {
+	return btcutil.NewAddressWitnessPubKeyHash(btcutil.Hash160(key.PubKey().SerializeCompressed()), params)
 }
 
 // parseKey accepts a WIF for either chain or a hex private key.
@@ -79,22 +77,25 @@ func parseKey(s string) (*btcec.PrivateKey, error) {
 	return key, nil
 }
 
-// estimateSize is a conservative size for a transaction spending P2PKH
-// inputs, used to set its fee before signing.
-func estimateSize(inputs, outputs int, opReturnBytes int) int64 {
-	size := 10 + 149*inputs + 34*outputs
+// estimateVSize is a conservative virtual size for a transaction spending
+// P2WPKH inputs to outputs of up to 43 bytes each, plus an OP_RETURN of
+// opReturnBytes, used to set its fee before signing.
+func estimateVSize(inputs, outputs int, opReturnBytes int) int64 {
+	// Per input: 41 bytes, plus a witness of a 73-byte signature and a
+	// 33-byte key, 108 weight units.
+	weight := 4*(11+41*inputs+43*outputs) + 2 + 108*inputs
 	if opReturnBytes > 0 {
-		size += 11 + opReturnBytes
+		weight += 4 * (9 + opReturnBytes)
 	}
-	return int64(size)
+	return int64((weight + 3) / 4)
 }
 
-// payFromKey sends amount to script from key's P2PKH outputs on c, adding
+// payFromKey sends amount to script from key's P2WPKH outputs on c, adding
 // extra (an OP_RETURN) if given, with change back to the key.
 func payFromKey(c chain, params *chaincfg.Params, key *btcec.PrivateKey,
 	script []byte, amount int64, extra *wire.TxOut) (chainhash.Hash, error) {
 
-	from, err := p2pkhAddress(key, params)
+	from, err := keyAddress(key, params)
 	if err != nil {
 		return chainhash.Hash{}, err
 	}
@@ -111,7 +112,7 @@ func payFromKey(c chain, params *chaincfg.Params, key *btcec.PrivateKey,
 	var inputs []utxo
 	var total, fee int64
 	for n := 1; ; n++ {
-		fee = estimateSize(n, 2, opReturnBytes) * walletFeePerByte
+		fee = estimateVSize(n, 2, opReturnBytes) * walletFeeRate
 		inputs, total, err = selectUTXOs(utxos, amount+fee)
 		if err != nil {
 			return chainhash.Hash{}, fmt.Errorf("%s: %w", from.EncodeAddress(), err)
@@ -121,25 +122,28 @@ func payFromKey(c chain, params *chaincfg.Params, key *btcec.PrivateKey,
 		}
 	}
 
-	tx := wire.NewMsgTx(1)
+	fromScript := destinationScript(from)
+	tx := wire.NewMsgTx(2)
+	fetcher := txscript.NewMultiPrevOutFetcher(nil)
 	for _, u := range inputs {
 		tx.AddTxIn(wire.NewTxIn(&u.outPoint, nil, nil))
+		fetcher.AddPrevOut(u.outPoint, wire.NewTxOut(u.value, fromScript))
 	}
 	tx.AddTxOut(wire.NewTxOut(amount, script))
 	if extra != nil {
 		tx.AddTxOut(extra)
 	}
-	if change := total - amount - fee; change >= softDust {
-		tx.AddTxOut(wire.NewTxOut(change, destinationScript(from)))
+	if change := total - amount - fee; change >= bitcoinDust {
+		tx.AddTxOut(wire.NewTxOut(change, fromScript))
 	}
 
-	fromScript := destinationScript(from)
-	for i := range tx.TxIn {
-		sig, err := txscript.SignatureScript(tx, i, fromScript, txscript.SigHashAll, key, true)
+	hashes := txscript.NewTxSigHashes(tx, fetcher)
+	for i, u := range inputs {
+		witness, err := txscript.WitnessSignature(tx, hashes, i, u.value, fromScript, txscript.SigHashAll, key, true)
 		if err != nil {
 			return chainhash.Hash{}, err
 		}
-		tx.TxIn[i].SignatureScript = sig
+		tx.TxIn[i].Witness = witness
 	}
 	return c.send(tx)
 }
@@ -174,6 +178,7 @@ func depositFromBitcoinCore(rpc *rpcClient, pegAddr btcutil.Address, dest destin
 	var funded struct {
 		Hex string `json:"hex"`
 	}
+	// The bridge's fee estimate would do; Bitcoin Core picks its own.
 	if err := rpc.call(&funded, "fundrawtransaction", raw); err != nil {
 		return "", err
 	}
@@ -181,7 +186,7 @@ func depositFromBitcoinCore(rpc *rpcClient, pegAddr btcutil.Address, dest destin
 		Hex      string `json:"hex"`
 		Complete bool   `json:"complete"`
 	}
-	if err := rpc.call(&signed, "signrawtransaction", funded.Hex); err != nil {
+	if err := rpc.call(&signed, "signrawtransactionwithwallet", funded.Hex); err != nil {
 		return "", err
 	}
 	if !signed.Complete {

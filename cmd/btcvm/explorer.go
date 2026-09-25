@@ -311,7 +311,7 @@ func (srv *server) activityHandler(*http.Request) (any, error) {
 		to, _ := p.dest.address(srv.b.btcParams)
 		e := map[string]any{
 			"type": "withdrawal", "time": p.time, "btcvmTxid": p.txid.String(),
-			"amount": formatBTC(p.value), "pays": formatBTC(p.value - srv.b.btcFee),
+			"amount": formatBTC(p.value), "pays": formatBTC(s.pays(srv.b, p, srv.feeRate())),
 			"to": to.EncodeAddress(), "status": "waiting",
 		}
 		if payment, ok := s.paid[p.txid]; ok {

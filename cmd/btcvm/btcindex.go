@@ -13,6 +13,7 @@ package main
 import (
 	"bytes"
 	"encoding/binary"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -33,7 +34,9 @@ type btcSource interface {
 	synced() (bool, error)
 	blockCount() (int64, error)
 	blockHash(height int64) (chainhash.Hash, error)
-	blockInfo(hash chainhash.Hash) (prev chainhash.Hash, unix int64, txids []chainhash.Hash, err error)
+	// blockInfo returns a block's parent, time and transactions, in one call:
+	// a Bitcoin block holds thousands.
+	blockInfo(hash chainhash.Hash) (prev chainhash.Hash, unix int64, txs []*wire.MsgTx, err error)
 	rawTx(txid chainhash.Hash) (*wire.MsgTx, error)
 	txBlock(txid chainhash.Hash) (height int64, unix int64, err error) // height 0: unconfirmed
 	unspentOutput(op wire.OutPoint) (bool, error)
@@ -99,7 +102,9 @@ type btcIndex struct {
 	mu      sync.RWMutex
 	watched map[string]int64 // script -> registered height
 
-	// Unconfirmed transactions touching watched addresses.
+	// Unconfirmed transactions: those touching watched addresses, and nil
+	// for the rest, so each is fetched once. Bitcoin's mempool holds
+	// hundreds of thousands.
 	mempoolMu  sync.RWMutex
 	mempoolTxs map[chainhash.Hash]*wire.MsgTx
 	pending    map[string][]pendingEntry
@@ -167,12 +172,16 @@ func (x *btcIndex) watch(script []byte) (int64, error) {
 
 // run follows the chain until stop is closed.
 func (x *btcIndex) run(stop <-chan struct{}) {
-	for {
+	for n := 0; ; n++ {
 		if err := x.sync(); err != nil {
 			log.Printf("bitcoin index: %v", err)
 		}
-		if err := x.refreshMempool(); err != nil {
-			log.Printf("bitcoin index mempool: %v", err)
+		// The mempool is large; a full pass every ten seconds is enough, as
+		// the wallet's own payments are added the moment they are sent.
+		if n%5 == 0 {
+			if err := x.refreshMempool(); err != nil {
+				log.Printf("bitcoin index mempool: %v", err)
+			}
 		}
 		select {
 		case <-stop:
@@ -221,7 +230,7 @@ func (x *btcIndex) sync() error {
 		if err != nil {
 			return err
 		}
-		prev, unix, txids, err := x.src.blockInfo(next)
+		prev, unix, txs, err := x.src.blockInfo(next)
 		if err != nil {
 			return err
 		}
@@ -231,14 +240,14 @@ func (x *btcIndex) sync() error {
 			}
 			continue
 		}
-		if err := x.apply(height+1, next, unix, txids); err != nil {
+		if err := x.apply(height+1, next, unix, txs); err != nil {
 			return err
 		}
 	}
 }
 
 // apply indexes one block.
-func (x *btcIndex) apply(height int64, hash chainhash.Hash, unix int64, txids []chainhash.Hash) error {
+func (x *btcIndex) apply(height int64, hash chainhash.Hash, unix int64, txs []*wire.MsgTx) error {
 	batch := new(leveldb.Batch)
 	undo := undoRecord{Hash: hash}
 	put := func(k, v []byte) {
@@ -262,11 +271,8 @@ func (x *btcIndex) apply(height int64, hash chainhash.Hash, unix int64, txids []
 	}
 	created := map[wire.OutPoint]newOutput{}
 
-	for i, txid := range txids {
-		tx, err := x.src.rawTx(txid)
-		if err != nil {
-			return fmt.Errorf("block %d tx %v: %w", height, txid, err)
-		}
+	for i, tx := range txs {
+		txid := tx.TxHash()
 		net := map[string]int64{}
 		if i > 0 { // the coinbase spends nothing
 			for _, in := range tx.TxIn {
@@ -370,11 +376,18 @@ func (x *btcIndex) refreshMempool() error {
 		if err != nil {
 			continue // mined or dropped since
 		}
-		txs[id] = tx
+		if x.touchesWatched(tx) {
+			txs[id] = tx
+		} else {
+			txs[id] = nil
+		}
 	}
 	pending := map[string][]pendingEntry{}
 	spent := map[wire.OutPoint]bool{}
 	for id, tx := range txs {
+		if tx == nil {
+			continue
+		}
 		net := map[string]int64{}
 		for _, in := range tx.TxIn {
 			script, err := x.db.Get(key(keyOwner, outPointBytes(in.PreviousOutPoint)), nil)
@@ -401,6 +414,22 @@ func (x *btcIndex) refreshMempool() error {
 	x.mempoolTxs, x.pending, x.pendingIn = txs, pending, spent
 	x.mempoolMu.Unlock()
 	return nil
+}
+
+// touchesWatched reports whether tx pays a watched address or spends an
+// indexed output.
+func (x *btcIndex) touchesWatched(tx *wire.MsgTx) bool {
+	for _, out := range tx.TxOut {
+		if _, ok := x.isWatched(out.PkScript); ok {
+			return true
+		}
+	}
+	for _, in := range tx.TxIn {
+		if ok, _ := x.db.Has(key(keyOwner, outPointBytes(in.PreviousOutPoint)), nil); ok {
+			return true
+		}
+	}
+	return false
 }
 
 // importTx adds a confirmed payment to a watched address made before it was
@@ -531,32 +560,23 @@ func (c *btcChain) blockHash(height int64) (chainhash.Hash, error) {
 	return *h, nil
 }
 
-func (c *btcChain) blockInfo(hash chainhash.Hash) (chainhash.Hash, int64, []chainhash.Hash, error) {
-	var b struct {
-		Prev string   `json:"previousblockhash"`
-		Time int64    `json:"time"`
-		Tx   []string `json:"tx"`
-	}
-	if err := c.rpc.call(&b, "getblock", hash.String(), true); err != nil {
+func (c *btcChain) blockInfo(hash chainhash.Hash) (chainhash.Hash, int64, []*wire.MsgTx, error) {
+	var raw string
+	if err := c.rpc.call(&raw, "getblock", hash.String(), 0); err != nil {
 		return chainhash.Hash{}, 0, nil, err
 	}
-	var prev chainhash.Hash
-	if b.Prev != "" {
-		p, err := chainhash.NewHashFromStr(b.Prev)
-		if err != nil {
-			return chainhash.Hash{}, 0, nil, err
-		}
-		prev = *p
+	b, err := hex.DecodeString(raw)
+	if err != nil {
+		return chainhash.Hash{}, 0, nil, err
 	}
-	txids := make([]chainhash.Hash, len(b.Tx))
-	for i, s := range b.Tx {
-		h, err := chainhash.NewHashFromStr(s)
-		if err != nil {
-			return chainhash.Hash{}, 0, nil, err
-		}
-		txids[i] = *h
+	var block wire.MsgBlock
+	if err := block.Deserialize(bytes.NewReader(b)); err != nil {
+		return chainhash.Hash{}, 0, nil, err
 	}
-	return prev, b.Time, txids, nil
+	if block.BlockHash() != hash {
+		return chainhash.Hash{}, 0, nil, fmt.Errorf("block %v came back as %v", hash, block.BlockHash())
+	}
+	return block.Header.PrevBlock, block.Header.Timestamp.Unix(), block.Transactions, nil
 }
 
 func (c *btcChain) rawTx(txid chainhash.Hash) (*wire.MsgTx, error) {

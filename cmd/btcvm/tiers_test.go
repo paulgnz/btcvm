@@ -51,7 +51,7 @@ func TestConfirmationTiers(t *testing.T) {
 // serialises exactly as before tiers existed, so signer sets made earlier,
 // and their fingerprints, stay valid.
 func TestPolicyWithoutTiersKeepsItsFingerprint(t *testing.T) {
-	raw, err := json.Marshal(pegPolicy{Confirmations: 20, VMFee: 1, BTCFee: 2})
+	raw, err := json.Marshal(pegPolicy{Confirmations: 20, VMFee: 1, MinFeeRate: 1, MaxFeeRate: 2})
 	require.NoError(t, err)
 	require.NotContains(t, string(raw), "confirmationTiers")
 }

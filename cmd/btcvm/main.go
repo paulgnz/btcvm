@@ -75,6 +75,7 @@ the BTCVM_* and BITCOIN_* environment variables; see the package docs.
 type settings struct {
 	vmRPC, vmUser, vmPass, vmNetwork string
 	btcRPC, btcUser, btcPass, btcNet string
+	btcWallet                        string
 	vmParams, btcParams              *chaincfg.Params
 }
 
@@ -90,7 +91,8 @@ func (s *settings) register(fs *flag.FlagSet) {
 	fs.StringVar(&s.vmUser, "vm-user", os.Getenv("BTCVM_RPC_USER"), "BTCVM RPC user")
 	fs.StringVar(&s.vmPass, "vm-pass", os.Getenv("BTCVM_RPC_PASS"), "BTCVM RPC password")
 	fs.StringVar(&s.vmNetwork, "vm-network", envOr("BTCVM_NETWORK", "testnet"), "BTCVM network: testnet or mainnet")
-	fs.StringVar(&s.btcRPC, "btc-rpc", envOr("BITCOIN_RPC", "http://127.0.0.1:44555"), "Bitcoin Core JSON-RPC URL")
+	fs.StringVar(&s.btcRPC, "btc-rpc", envOr("BITCOIN_RPC", "http://127.0.0.1:8332"), "Bitcoin Core JSON-RPC URL")
+	fs.StringVar(&s.btcWallet, "btc-wallet", envOr("BITCOIN_WALLET", "btcvm"), "Bitcoin Core wallet the bridge watches addresses with; created, watch-only, if missing")
 	fs.StringVar(&s.btcUser, "btc-user", os.Getenv("BITCOIN_RPC_USER"), "Bitcoin Core RPC user")
 	fs.StringVar(&s.btcPass, "btc-pass", os.Getenv("BITCOIN_RPC_PASS"), "Bitcoin Core RPC password")
 	fs.StringVar(&s.btcNet, "btc-network", envOr("BITCOIN_NETWORK", "testnet"), "Bitcoin network: regtest, testnet or mainnet")
@@ -109,8 +111,20 @@ func (s *settings) vmChain() *vmChain {
 	return &vmChain{rpc: newRPCClient(s.vmRPC, s.vmUser, s.vmPass)}
 }
 
+// btcRPCClient is the bridge's wallet endpoint on Bitcoin Core. Calls that
+// are not wallet calls work there too.
 func (s *settings) btcRPCClient() *rpcClient {
-	return newRPCClient(s.btcRPC, s.btcUser, s.btcPass)
+	return s.btcWalletClient(s.btcWallet)
+}
+
+// btcWalletClient is the endpoint of Bitcoin Core wallet name ("" for the
+// node's default wallet).
+func (s *settings) btcWalletClient(name string) *rpcClient {
+	url := strings.TrimRight(s.btcRPC, "/")
+	if name != "" {
+		url += "/wallet/" + name
+	}
+	return newRPCClient(url, s.btcUser, s.btcPass)
 }
 
 func main() {
@@ -254,6 +268,7 @@ func cmdPegIn(args []string) error {
 	signersPath := fs.String("signers", "", "peg signer set file")
 	to := fs.String("to", "", "BTCVM address to credit")
 	amountFlag := fs.String("amount", "", "amount in BTC")
+	fromWallet := fs.String("from-wallet", "", "Bitcoin Core wallet holding the BTC to deposit (default: the node's default wallet)")
 	if err := parseFlags(fs, &s, args); err != nil {
 		return err
 	}
@@ -280,7 +295,7 @@ func cmdPegIn(args []string) error {
 	if err != nil {
 		return err
 	}
-	txid, err := depositFromBitcoinCore(s.btcRPCClient(), pegAddr, dest, amount)
+	txid, err := depositFromBitcoinCore(s.btcWalletClient(*fromWallet), pegAddr, dest, amount)
 	if err != nil {
 		return err
 	}
@@ -419,11 +434,13 @@ func bridgeFlags(fs *flag.FlagSet) *bridge {
 		},
 	}
 	fs.Int64Var(&b.depositConfirmations, "confirmations", 6, "Bitcoin confirmations before a deposit is credited")
-	fs.StringVar(&b.tiersFlag, "confirmation-tiers", "", `fewer confirmations for smaller deposits, as BTC:CONFIRMATIONS pairs, e.g. "1:1,10:6,50:12"; larger deposits need -confirmations`)
-	fs.Int64Var(&b.vmFee, "vm-fee", satPerBTC/100, "satoshis deducted from each credit for the BTCVM fee")
-	fs.Int64Var(&b.btcFee, "btc-fee", satPerBTC, "satoshis deducted from each peg-out for the Bitcoin fee")
-	fs.Int64Var(&b.minDeposit, "min-deposit", satPerBTC, "smallest deposit credited, in satoshis")
-	fs.Int64Var(&b.minPegOut, "min-peg-out", 2*satPerBTC, "smallest peg-out paid, in satoshis")
+	fs.StringVar(&b.tiersFlag, "confirmation-tiers", "", `fewer confirmations for smaller deposits, as BTC:CONFIRMATIONS pairs, e.g. "0.001:1,0.01:3"; larger deposits need -confirmations`)
+	fs.Int64Var(&b.vmFee, "vm-fee", 1000, "satoshis deducted from each credit for the BTCVM fee")
+	fs.Int64Var(&b.minFeeRate, "min-fee-rate", 1, "lowest fee rate a Bitcoin payout pays, in sat/vB")
+	fs.Int64Var(&b.maxFeeRate, "max-fee-rate", 50, "highest fee rate a Bitcoin payout pays, in sat/vB; the fee comes out of the payout")
+	fs.DurationVar(&b.bumpAfter, "bump-after", 30*time.Minute, "replace a payout still unconfirmed after this long with one paying the current fee rate (0: never)")
+	fs.Int64Var(&b.minDeposit, "min-deposit", 10_000, "smallest deposit credited, in satoshis")
+	fs.Int64Var(&b.minPegOut, "min-peg-out", 30_000, "smallest peg-out paid, in satoshis; it must cover the network fee")
 	fs.Int64Var(&b.maxDeposit, "max-deposit", 0, "largest deposit credited, in satoshis; larger ones are held for refund (0: no cap)")
 	fs.Int64Var(&b.maxCirculating, "max-circulating", 0, "most BTC, in satoshis, the bridge lets circulate on BTCVM (0: no cap)")
 	fs.StringVar(&b.cosignersPath, "cosigners", "", "JSON list of remote signers, [{\"url\": ...}] (from btcvm signer-setup assemble)")
@@ -445,7 +462,12 @@ func registryFor(path, signersPath string) *depositRegistry {
 func (b *bridge) connect(s *settings, signers *signerSet) error {
 	b.signers = signers
 	b.vm = s.vmChain()
-	b.btc = &btcChain{rpc: s.btcRPCClient()}
+	btc := &btcChain{rpc: s.btcRPCClient()}
+	if err := btc.ensureWallet(); err != nil {
+		return fmt.Errorf("Bitcoin Core wallet %q: %w", s.btcWallet, err)
+	}
+	b.btc = btc
+	b.feeRate = btc.estimateFeeRate
 	b.vmParams, b.btcParams = s.vmParams, s.btcParams
 	if n := signers.Networks; n != nil && (n.Bitcoin != s.btcNet || n.BTCVM != s.vmNetwork) {
 		return fmt.Errorf("the signer set is for Bitcoin %s and BTCVM %s, not %s and %s",
@@ -487,12 +509,14 @@ func (b *bridge) applyPolicy(p *pegPolicy) error {
 		return nil
 	}
 	fields := map[string]*int64{
-		"confirmations": &b.depositConfirmations, "vm-fee": &b.vmFee, "btc-fee": &b.btcFee,
+		"confirmations": &b.depositConfirmations, "vm-fee": &b.vmFee,
+		"min-fee-rate": &b.minFeeRate, "max-fee-rate": &b.maxFeeRate,
 		"min-deposit": &b.minDeposit, "min-peg-out": &b.minPegOut,
 		"max-deposit": &b.maxDeposit, "max-circulating": &b.maxCirculating,
 	}
 	agreed := map[string]int64{
-		"confirmations": p.Confirmations, "vm-fee": p.VMFee, "btc-fee": p.BTCFee,
+		"confirmations": p.Confirmations, "vm-fee": p.VMFee,
+		"min-fee-rate": p.MinFeeRate, "max-fee-rate": p.MaxFeeRate,
 		"min-deposit": p.MinDeposit, "min-peg-out": p.MinPegOut,
 		"max-deposit": p.MaxDeposit, "max-circulating": p.MaxCirculating,
 	}

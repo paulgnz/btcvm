@@ -86,18 +86,14 @@ func (f *fakeBTC) blockHash(h int64) (chainhash.Hash, error) {
 	}
 	return f.hashes[h], nil
 }
-func (f *fakeBTC) blockInfo(hash chainhash.Hash) (chainhash.Hash, int64, []chainhash.Hash, error) {
+func (f *fakeBTC) blockInfo(hash chainhash.Hash) (chainhash.Hash, int64, []*wire.MsgTx, error) {
 	for h, x := range f.hashes {
 		if x == hash {
 			var prev chainhash.Hash
 			if h > 0 {
 				prev = f.hashes[h-1]
 			}
-			var ids []chainhash.Hash
-			for _, tx := range f.blocks[h] {
-				ids = append(ids, tx.TxHash())
-			}
-			return prev, int64(1_700_000_000 + h*60), ids, nil
+			return prev, int64(1_700_000_000 + h*600), f.blocks[h], nil
 		}
 	}
 	return chainhash.Hash{}, 0, nil, errors.New("no such block")
@@ -164,8 +160,8 @@ func TestBTCIndex(t *testing.T) {
 	x, err := openBTCIndex(path, chain)
 	require.NoError(err)
 
-	alice := destination{kind: destP2PKH, hash: [20]byte{1}}.pkScript()
-	bob := destination{kind: destP2PKH, hash: [20]byte{2}}.pkScript()
+	alice := destination{kind: destP2PKH, hash: [32]byte{1}}.pkScript()
+	bob := destination{kind: destP2PKH, hash: [32]byte{2}}.pkScript()
 
 	// Paid before the index or the address existed: not seen.
 	chain.pay(nil, 5*btc, alice)

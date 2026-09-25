@@ -88,8 +88,11 @@ type proposal struct {
 	// involves, so a signer that has not seen them yet starts watching.
 	Register []destination
 
-	tx      *wire.MsgTx
-	redeems [][]byte
+	// FeeRate is the sat/vB a Bitcoin payout or refund pays.
+	FeeRate int64
+
+	tx   *wire.MsgTx
+	prev []spent // the output each input spends
 }
 
 type signRequest struct {
@@ -97,6 +100,7 @@ type signRequest struct {
 	Action   action   `json:"action"`
 	Tx       string   `json:"tx"` // unsigned
 	Register []string `json:"register,omitempty"`
+	FeeRate  int64    `json:"feeRate,omitempty"` // sat/vB, for Bitcoin transactions
 }
 
 type signResponse struct {
@@ -105,7 +109,7 @@ type signResponse struct {
 }
 
 func encodeDest(d destination) string {
-	return hex.EncodeToString(append([]byte{d.kind}, d.hash[:]...))
+	return hex.EncodeToString(d.bytes())
 }
 
 func parseDest(s string) (destination, error) {
@@ -125,7 +129,7 @@ func (b *bridge) authorize(p *proposal) error {
 	for i, pub := range b.signers.pubKeys {
 		for _, key := range b.signers.privKeys {
 			if key.PubKey().IsEqual(pub) {
-				s, err := signInputs(p.tx, p.redeems, key)
+				s, err := signInputs(p.tx, p.prev, key)
 				if err != nil {
 					return err
 				}
@@ -143,7 +147,7 @@ func (b *bridge) authorize(p *proposal) error {
 			if _, have := sigs[index]; have {
 				continue
 			}
-			err = b.signers.verifyInputs(p.tx, p.redeems, index, s)
+			err = b.signers.verifyInputs(p.tx, p.prev, index, s)
 		}
 		if err != nil {
 			failures = append(failures, fmt.Sprintf("%s: %v", r.URL, err))
@@ -154,7 +158,7 @@ func (b *bridge) authorize(p *proposal) error {
 	if len(sigs) < b.signers.Required {
 		return fmt.Errorf("%d of %d signatures: %s", len(sigs), b.signers.Required, strings.Join(failures, "; "))
 	}
-	return b.signers.assemble(p.tx, p.redeems, sigs)
+	return b.signers.assemble(p.tx, p.prev, sigs)
 }
 
 // remoteSigner is a "btcvm signer" the coordinator asks for signatures.
@@ -250,7 +254,7 @@ func (r *remoteSigner) do(method, path string, body []byte, result any) error {
 // sign asks the signer to sign p, returning its position in set and its
 // signature for each input.
 func (r *remoteSigner) sign(p *proposal, set *signerSet) (int, [][]byte, error) {
-	req := signRequest{Chain: p.Chain, Action: p.Action, Tx: encodeTx(p.tx)}
+	req := signRequest{Chain: p.Chain, Action: p.Action, Tx: encodeTx(p.tx), FeeRate: p.FeeRate}
 	for _, d := range p.Register {
 		req.Register = append(req.Register, encodeDest(d))
 	}
@@ -419,12 +423,12 @@ func (c *cosigner) handleSign(r *http.Request) (any, error) {
 		c.b.logf("refused %s: %v", req.Action.Kind, err)
 		return nil, err
 	}
-	tx, redeems, value, err := c.check(req)
+	tx, prev, value, err := c.check(req)
 	if err != nil {
 		c.b.logf("refused %s: %v", key, err)
 		return nil, err
 	}
-	sigs, err := signInputs(tx, redeems, c.key)
+	sigs, err := signInputs(tx, prev, c.key)
 	if err != nil {
 		return nil, err
 	}
@@ -441,9 +445,9 @@ func (c *cosigner) handleSign(r *http.Request) (any, error) {
 }
 
 // check decides whether to sign req, from this signer's own view of both
-// chains. It returns the transaction, the redeem script of each input, and
-// the BTC the action moves.
-func (c *cosigner) check(req signRequest) (*wire.MsgTx, [][]byte, int64, error) {
+// chains. It returns the transaction, the output each input spends, and the
+// BTC the action moves.
+func (c *cosigner) check(req signRequest) (*wire.MsgTx, []spent, int64, error) {
 	b := c.b
 	if p := b.paused(); p != nil {
 		return nil, nil, 0, fmt.Errorf("this signer is paused: %s", p.Reason)
@@ -504,7 +508,7 @@ func (c *cosigner) check(req signRequest) (*wire.MsgTx, [][]byte, int64, error) 
 	}
 
 	var want *wire.MsgTx
-	var redeems [][]byte
+	var prev []spent
 	var value int64
 	unspent := map[wire.OutPoint]bool{}
 	switch req.Action.Kind {
@@ -537,9 +541,7 @@ func (c *cosigner) check(req signRequest) (*wire.MsgTx, [][]byte, int64, error) 
 			return nil, nil, 0, errors.New("inputs do not cover the deposit")
 		}
 		want = b.buildRelease(inputs, total, d)
-		for range inputs {
-			redeems = append(redeems, b.signers.redeemScript)
-		}
+		prev = b.reserveSpends(inputs)
 		value = d.value
 		reserveAddr, err := b.vmReserveAddress()
 		if err != nil {
@@ -557,15 +559,21 @@ func (c *cosigner) check(req signRequest) (*wire.MsgTx, [][]byte, int64, error) 
 		if req.Chain != chainBitcoin {
 			return nil, nil, 0, fmt.Errorf("a %s is a Bitcoin transaction", req.Action.Kind)
 		}
+		if req.FeeRate < b.minFeeRate || req.FeeRate > b.maxFeeRate {
+			return nil, nil, 0, fmt.Errorf("fee rate %d sat/vB is outside %d-%d", req.FeeRate, b.minFeeRate, b.maxFeeRate)
+		}
+		// An action already done by a transaction still unconfirmed may be
+		// done again only by replacing it: same inputs, higher fee.
+		r, err := b.replacementFor(s, req.Action)
+		if err != nil {
+			return nil, nil, 0, err
+		}
 		var dest destination
 		var data []byte
 		if req.Action.Kind == actionPayout {
 			txid, err := chainhash.NewHashFromStr(req.Action.PegOut)
 			if err != nil {
 				return nil, nil, 0, err
-			}
-			if paid, done := s.paid[*txid]; done {
-				return nil, nil, 0, fmt.Errorf("peg-out %v was already paid in %v", txid, paid)
 			}
 			p, ok := findPegOut(s.pegOuts, *txid)
 			if !ok {
@@ -577,11 +585,12 @@ func (c *cosigner) check(req signRequest) (*wire.MsgTx, [][]byte, int64, error) 
 			if err != nil {
 				return nil, nil, 0, err
 			}
-			if txid, done := s.refunded[op]; done {
-				return nil, nil, 0, fmt.Errorf("deposit %v was already refunded in %v", op, txid)
-			}
 			// Signers only refund deposits the bridge will never credit.
-			d, ok := findDeposit(s.held, op)
+			held := s.held
+			if r != nil {
+				held = s.settled // refunded, by the transaction r replaces
+			}
+			d, ok := findDeposit(held, op)
 			if !ok {
 				return nil, nil, 0, fmt.Errorf("deposit %v is not held for a refund in this signer's view", op)
 			}
@@ -593,30 +602,37 @@ func (c *cosigner) check(req signRequest) (*wire.MsgTx, [][]byte, int64, error) 
 			}
 			value, data = d.value, encodeRefund(op)
 		}
-		if value <= b.btcFee {
-			return nil, nil, 0, errors.New("the amount does not cover the Bitcoin fee")
-		}
-		var confirmed []utxo
-		for _, u := range s.lockedUTXOs {
-			unspent[u.outPoint] = true
-			if u.confirmations > 0 {
-				confirmed = append(confirmed, u)
+		var inputs []utxo
+		if r != nil {
+			if len(tx.TxIn) != len(r.inputs) {
+				return nil, nil, 0, errors.New("a replacement must spend exactly what it replaces")
+			}
+			if inputs, _, err = pick(r.inputs); err != nil {
+				return nil, nil, 0, err
+			}
+			if old := b.feeRateOf(r.tx, r.prev); req.FeeRate <= old {
+				return nil, nil, 0, fmt.Errorf("a replacement must pay more than %d sat/vB", old)
+			}
+			for _, u := range r.inputs {
+				unspent[u.outPoint] = true
+			}
+		} else {
+			var confirmed []utxo
+			for _, u := range s.lockedUTXOs {
+				unspent[u.outPoint] = true
+				if u.confirmations > 0 {
+					confirmed = append(confirmed, u)
+				}
+			}
+			if inputs, _, err = pick(confirmed); err != nil {
+				return nil, nil, 0, err
 			}
 		}
-		inputs, total, err := pick(confirmed)
-		if err != nil {
+		if prev, _, err = s.pegSpends(inputs); err != nil {
 			return nil, nil, 0, err
 		}
-		if total < value {
-			return nil, nil, 0, errors.New("inputs do not cover the payment")
-		}
-		want = b.buildPayout(inputs, total, value, dest, data)
-		for _, u := range inputs {
-			redeem := s.redeemFor[string(u.pkScript)]
-			if redeem == nil {
-				return nil, nil, 0, fmt.Errorf("no redeem script for %v", u.outPoint)
-			}
-			redeems = append(redeems, redeem)
+		if want, err = b.buildPayout(inputs, prev, value, dest, data, req.FeeRate); err != nil {
+			return nil, nil, 0, err
 		}
 
 	default:
@@ -637,7 +653,7 @@ func (c *cosigner) check(req signRequest) (*wire.MsgTx, [][]byte, int64, error) 
 		c.log.volumeSince(time.Now().Add(-24*time.Hour))+value > c.maxDaily {
 		return nil, nil, 0, fmt.Errorf("signing would exceed this signer's %s BTC daily limit", formatBTC(c.maxDaily))
 	}
-	return tx, redeems, value, nil
+	return tx, prev, value, nil
 }
 
 // catchUp handles a signer that started watching a deposit address after a

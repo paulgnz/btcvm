@@ -5,6 +5,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+	"github.com/MetalBlockchain/btcvm/btcd/chaincfg"
 	"os"
 	"os/exec"
 	"strconv"
@@ -65,13 +66,13 @@ func TestWalletVectors(t *testing.T) {
 		secret := sha256.Sum256([]byte(k.Label))
 		key, _ := btcec.PrivKeyFromBytes(secret[:])
 		keys[k.Label] = key
-		addr, err := p2pkhAddress(key, vmMain)
+		addr, err := keyAddress(key, vmMain)
 		require.NoError(err)
 		require.Equal(k.Address, addr.EncodeAddress(), k.Label)
-		btcAddr, err := p2pkhAddress(key, &bitcoinMainNet)
+		btcAddr, err := keyAddress(key, &chaincfg.MainNetParams)
 		require.NoError(err)
 		require.Equal(k.Address, btcAddr.EncodeAddress(), "one address on both networks")
-		wif, err := btcutil.NewWIF(key, &bitcoinMainNet, true)
+		wif, err := btcutil.NewWIF(key, &chaincfg.MainNetParams, true)
 		require.NoError(err)
 		require.Equal(k.Wif, wif.String())
 	}
@@ -82,7 +83,7 @@ func TestWalletVectors(t *testing.T) {
 	h, _ := hex.DecodeString(v.Deposit.Dest.Hash160)
 	copy(dest.hash[:], h)
 	require.Equal(v.Deposit.RedeemScript, hex.EncodeToString(signers.depositRedeemScript(dest)))
-	depositAddr, err := signers.depositAddress(dest, &bitcoinMainNet)
+	depositAddr, err := signers.depositAddress(dest, &chaincfg.MainNetParams)
 	require.NoError(err)
 	require.Equal(v.Deposit.Address, depositAddr.EncodeAddress())
 	require.Equal(v.ReserveScript, hex.EncodeToString(signers.pkScript()))

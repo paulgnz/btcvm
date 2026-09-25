@@ -19,8 +19,8 @@ import (
 )
 
 // signerSet is the m-of-n multisig that holds the peg: BTC locked on
-// Bitcoin and the reserve on BTCVM are both locked to the same redeem
-// script, so they share one P2SH hash on both chains.
+// Bitcoin and the reserve on BTCVM are both locked to the same witness
+// script, so they share one P2WSH address (bc1q...) on both chains.
 //
 // A signers file holds public keys and, for development, the private keys
 // too. In production each signer keeps its own key and signs separately.
@@ -53,9 +53,12 @@ type setNetworks struct {
 // pegPolicy is the bridge's policy, in satoshis. Signers rebuild transactions
 // with it, so coordinator and signers must agree on it exactly.
 type pegPolicy struct {
-	Confirmations  int64 `json:"confirmations"`
-	VMFee          int64 `json:"vmFee"`
-	BTCFee         int64 `json:"btcFee"`
+	Confirmations int64 `json:"confirmations"`
+	VMFee         int64 `json:"vmFee"`
+	// Bitcoin payouts pay a fee rate within these bounds, in sat/vB,
+	// out of the payout.
+	MinFeeRate     int64 `json:"minFeeRate"`
+	MaxFeeRate     int64 `json:"maxFeeRate"`
 	MinDeposit     int64 `json:"minDeposit"`
 	MinPegOut      int64 `json:"minPegOut"`
 	MaxDeposit     int64 `json:"maxDeposit"`
@@ -140,7 +143,7 @@ func (s *signerSet) load() error {
 		}
 		s.pubKeys = append(s.pubKeys, pub)
 		// The network only affects encoding, which the script does not use.
-		addr, err := btcutil.NewAddressPubKey(pub.SerializeCompressed(), &bitcoinMainNet)
+		addr, err := btcutil.NewAddressPubKey(pub.SerializeCompressed(), &chaincfg.MainNetParams)
 		if err != nil {
 			return err
 		}
@@ -172,55 +175,67 @@ func (s *signerSet) load() error {
 	return err
 }
 
-// address returns the peg P2SH address on the network params encode.
-func (s *signerSet) address(params *chaincfg.Params) (*btcutil.AddressScriptHash, error) {
-	return btcutil.NewAddressScriptHash(s.redeemScript, params)
+// address returns the peg P2WSH address on the network params encode.
+func (s *signerSet) address(params *chaincfg.Params) (btcutil.Address, error) {
+	return s.destination().address(params)
 }
 
 func (s *signerSet) pkScript() []byte {
-	return p2shScript(s.redeemScript)
+	return p2wshScript(s.redeemScript)
 }
 
 func (s *signerSet) destination() destination {
-	return destination{kind: destP2SH, hash: hash160Of(s.redeemScript)}
+	return p2wshDestination(s.redeemScript)
 }
 
-// depositRedeemScript is the redeem script of dest's personal deposit
-// address: <kind || hash160> OP_DROP followed by the peg multisig. Only the
+// depositRedeemScript is the witness script of dest's personal deposit
+// address: <kind || program> OP_DROP followed by the peg multisig. Only the
 // signers can spend it, exactly as with the peg address, but each BTCVM
 // address gets its own Bitcoin address, so deposits need no OP_RETURN and
 // any wallet can make them.
 func (s *signerSet) depositRedeemScript(dest destination) []byte {
-	script := make([]byte, 0, 2+21+len(s.redeemScript))
-	script = append(script, txscript.OP_DATA_21, dest.kind)
-	script = append(script, dest.hash[:]...)
-	script = append(script, txscript.OP_DROP)
-	return append(script, s.redeemScript...)
+	prefix, _ := txscript.NewScriptBuilder().AddData(dest.bytes()).AddOp(txscript.OP_DROP).Script()
+	return append(prefix, s.redeemScript...)
 }
 
-func (s *signerSet) depositAddress(dest destination, params *chaincfg.Params) (*btcutil.AddressScriptHash, error) {
-	return btcutil.NewAddressScriptHash(s.depositRedeemScript(dest), params)
+func (s *signerSet) depositAddress(dest destination, params *chaincfg.Params) (btcutil.Address, error) {
+	return p2wshDestination(s.depositRedeemScript(dest)).address(params)
 }
 
-func hash160Of(script []byte) [20]byte {
-	var h [20]byte
-	copy(h[:], btcutil.Hash160(script))
-	return h
+func p2wshDestination(witnessScript []byte) destination {
+	sum := sha256.Sum256(witnessScript)
+	d, _ := newDestination(destP2WSH, sum[:])
+	return d
 }
 
-func p2shScript(redeemScript []byte) []byte {
-	return destination{kind: destP2SH, hash: hash160Of(redeemScript)}.pkScript()
+func p2wshScript(witnessScript []byte) []byte {
+	return p2wshDestination(witnessScript).pkScript()
+}
+
+// spent is what signing an input needs to know about the output it spends:
+// its witness script and value, both committed to by a BIP143 signature.
+type spent struct {
+	script []byte
+	value  int64
+}
+
+// sigHashes precomputes tx's BIP143 hashes.
+func sigHashes(tx *wire.MsgTx, prev []spent) *txscript.TxSigHashes {
+	fetcher := txscript.NewMultiPrevOutFetcher(nil)
+	for i, in := range tx.TxIn {
+		fetcher.AddPrevOut(in.PreviousOutPoint, wire.NewTxOut(prev[i].value, p2wshScript(prev[i].script)))
+	}
+	return txscript.NewTxSigHashes(tx, fetcher)
 }
 
 // sign signs every input of tx with the private keys this process holds.
-// redeemScripts[i] is the redeem script of the peg output input i spends:
-// the peg multisig or a deposit script.
-func (s *signerSet) sign(tx *wire.MsgTx, redeemScripts [][]byte) error {
+// prev[i] is the peg output input i spends.
+func (s *signerSet) sign(tx *wire.MsgTx, prev []spent) error {
 	sigs := map[int][][]byte{}
 	for i, pub := range s.pubKeys {
 		for _, key := range s.privKeys {
 			if key.PubKey().IsEqual(pub) {
-				inputSigs, err := signInputs(tx, redeemScripts, key)
+				inputSigs, err := signInputs(tx, prev, key)
 				if err != nil {
 					return err
 				}
@@ -229,7 +244,7 @@ func (s *signerSet) sign(tx *wire.MsgTx, redeemScripts [][]byte) error {
 			}
 		}
 	}
-	return s.assemble(tx, redeemScripts, sigs)
+	return s.assemble(tx, prev, sigs)
 }
 
 // indexOf returns the position of pub in the set, or -1.
@@ -243,14 +258,15 @@ func (s *signerSet) indexOf(pub *btcec.PublicKey) int {
 }
 
 // signInputs returns key's signature, with its sighash byte, for each input
-// of tx. redeemScripts[i] is the script input i spends.
-func signInputs(tx *wire.MsgTx, redeemScripts [][]byte, key *btcec.PrivateKey) ([][]byte, error) {
-	if len(redeemScripts) != len(tx.TxIn) {
-		return nil, fmt.Errorf("have %d redeem scripts for %d inputs", len(redeemScripts), len(tx.TxIn))
+// of tx. prev[i] is the output input i spends.
+func signInputs(tx *wire.MsgTx, prev []spent, key *btcec.PrivateKey) ([][]byte, error) {
+	if len(prev) != len(tx.TxIn) {
+		return nil, fmt.Errorf("have %d spent outputs for %d inputs", len(prev), len(tx.TxIn))
 	}
+	hashes := sigHashes(tx, prev)
 	sigs := make([][]byte, len(tx.TxIn))
-	for i, redeem := range redeemScripts {
-		sig, err := txscript.RawTxInSignature(tx, i, redeem, txscript.SigHashAll, key)
+	for i, p := range prev {
+		sig, err := txscript.RawTxInWitnessSignature(tx, hashes, i, p.value, p.script, txscript.SigHashAll, key)
 		if err != nil {
 			return nil, fmt.Errorf("signing input %d: %w", i, err)
 		}
@@ -261,13 +277,14 @@ func signInputs(tx *wire.MsgTx, redeemScripts [][]byte, key *btcec.PrivateKey) (
 
 // verifyInputs checks sigs are the signer at index's signatures of every
 // input of tx.
-func (s *signerSet) verifyInputs(tx *wire.MsgTx, redeemScripts [][]byte, index int, sigs [][]byte) error {
+func (s *signerSet) verifyInputs(tx *wire.MsgTx, prev []spent, index int, sigs [][]byte) error {
 	if index < 0 || index >= len(s.pubKeys) {
 		return fmt.Errorf("no signer %d", index)
 	}
-	if len(sigs) != len(tx.TxIn) || len(redeemScripts) != len(tx.TxIn) {
+	if len(sigs) != len(tx.TxIn) || len(prev) != len(tx.TxIn) {
 		return fmt.Errorf("have %d signatures for %d inputs", len(sigs), len(tx.TxIn))
 	}
+	hashes := sigHashes(tx, prev)
 	for i, sig := range sigs {
 		if len(sig) < 2 || txscript.SigHashType(sig[len(sig)-1]) != txscript.SigHashAll {
 			return fmt.Errorf("input %d: not a SIGHASH_ALL signature", i)
@@ -276,7 +293,7 @@ func (s *signerSet) verifyInputs(tx *wire.MsgTx, redeemScripts [][]byte, index i
 		if err != nil {
 			return fmt.Errorf("input %d: %w", i, err)
 		}
-		hash, err := txscript.CalcSignatureHash(redeemScripts[i], txscript.SigHashAll, tx, i)
+		hash, err := txscript.CalcWitnessSigHash(prev[i].script, hashes, txscript.SigHashAll, tx, i, prev[i].value)
 		if err != nil {
 			return err
 		}
@@ -287,11 +304,11 @@ func (s *signerSet) verifyInputs(tx *wire.MsgTx, redeemScripts [][]byte, index i
 	return nil
 }
 
-// assemble completes tx's signature scripts from the signatures of at least
+// assemble completes tx's witnesses from the signatures of at least
 // Required signers, keyed by their position in the set.
-func (s *signerSet) assemble(tx *wire.MsgTx, redeemScripts [][]byte, sigs map[int][][]byte) error {
-	if len(redeemScripts) != len(tx.TxIn) {
-		return fmt.Errorf("have %d redeem scripts for %d inputs", len(redeemScripts), len(tx.TxIn))
+func (s *signerSet) assemble(tx *wire.MsgTx, prev []spent, sigs map[int][][]byte) error {
+	if len(prev) != len(tx.TxIn) {
+		return fmt.Errorf("have %d spent outputs for %d inputs", len(prev), len(tx.TxIn))
 	}
 	// CHECKMULTISIG needs signatures in public key order.
 	var signers []int
@@ -303,16 +320,32 @@ func (s *signerSet) assemble(tx *wire.MsgTx, redeemScripts [][]byte, sigs map[in
 	if len(signers) < s.Required {
 		return fmt.Errorf("have signatures from %d signers, need %d", len(signers), s.Required)
 	}
-	for i, redeem := range redeemScripts {
-		b := txscript.NewScriptBuilder().AddOp(txscript.OP_0) // CHECKMULTISIG's extra pop
+	for i, p := range prev {
+		witness := wire.TxWitness{nil} // CHECKMULTISIG's extra pop
 		for _, signer := range signers {
-			b.AddData(sigs[signer][i])
+			witness = append(witness, sigs[signer][i])
 		}
-		sigScript, err := b.AddData(redeem).Script()
-		if err != nil {
-			return err
-		}
-		tx.TxIn[i].SignatureScript = sigScript
+		tx.TxIn[i].Witness = append(witness, p.script)
+		tx.TxIn[i].SignatureScript = nil
 	}
 	return nil
+}
+
+// witnessVSize is a transaction's virtual size once its inputs, each
+// spending a peg output with a witness script of the given size, carry
+// Required signatures. Signatures are taken at their largest, so the size
+// is never under the real one, and it depends only on the unsigned
+// transaction: coordinator and signers compute the same fee from it.
+func (s *signerSet) witnessVSize(tx *wire.MsgTx, scriptSizes []int) int64 {
+	base := int64(tx.SerializeSizeStripped())
+	weight := base * 4
+	weight += 2 // segwit marker and flag
+	for _, n := range scriptSizes {
+		w := wire.VarIntSerializeSize(uint64(s.Required + 2)) // item count
+		w++                                                   // empty dummy
+		w += s.Required * (1 + 73)                            // signatures, 73 bytes at most
+		w += wire.VarIntSerializeSize(uint64(n)) + n          // witness script
+		weight += int64(w)
+	}
+	return (weight + 3) / 4
 }

@@ -4,7 +4,9 @@ import (
 	"bytes"
 	"errors"
 	"fmt"
+	"github.com/MetalBlockchain/btcvm/btcd/chaincfg"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/require"
 
@@ -78,7 +80,46 @@ func (c *fakeChain) unspent(addresses []btcutil.Address, minConf int64) ([]utxo,
 	return out, nil
 }
 
+// prevOut is prevOutSource for the fake chain.
+func (c *fakeChain) prevOut(op wire.OutPoint) (*wire.TxOut, bool, error) {
+	out, ok := c.output(op)
+	if !ok {
+		return nil, false, fmt.Errorf("no output %v", op)
+	}
+	confirmed := false
+	for _, t := range c.txs {
+		if t.tx.TxHash() == op.Hash {
+			confirmed = t.confirmations > 0
+		}
+		for _, in := range t.tx.TxIn {
+			if in.PreviousOutPoint == op && t.confirmations > 0 {
+				return out, false, nil // spent in a block
+			}
+		}
+	}
+	return out, confirmed, nil
+}
+
+// replace drops unconfirmed transactions that spend any of tx's inputs, as
+// a node does when a replacement (BIP125) is accepted.
+func (c *fakeChain) replace(tx *wire.MsgTx) {
+	kept := c.txs[:0]
+	for _, t := range c.txs {
+		conflicts := false
+		for _, in := range t.tx.TxIn {
+			for _, mine := range tx.TxIn {
+				conflicts = conflicts || in.PreviousOutPoint == mine.PreviousOutPoint
+			}
+		}
+		if !conflicts || t.confirmations > 0 {
+			kept = append(kept, t)
+		}
+	}
+	c.txs = kept
+}
+
 func (c *fakeChain) send(tx *wire.MsgTx) (chainhash.Hash, error) {
+	c.replace(tx)
 	var in, out int64
 	for i, txIn := range tx.TxIn {
 		prev, ok := c.output(txIn.PreviousOutPoint)
@@ -102,7 +143,7 @@ func (c *fakeChain) send(tx *wire.MsgTx) (chainhash.Hash, error) {
 	if out > in {
 		return chainhash.Hash{}, errors.New("outputs exceed inputs")
 	}
-	c.txs = append(c.txs, &chainTx{tx: tx})
+	c.txs = append(c.txs, &chainTx{tx: tx, time: time.Now().Unix()})
 	return tx.TxHash(), nil
 }
 
@@ -132,10 +173,11 @@ func newHarness(t *testing.T) *harness {
 	h := &harness{t: t, vm: &fakeChain{}, btc: &fakeChain{}}
 	h.b = &bridge{
 		signers: signers, vm: h.vm, btc: h.btc,
-		vmParams: &bitcoinTestNet, btcParams: &bitcoinRegTest,
+		vmParams: &chaincfg.TestNet3Params, btcParams: &chaincfg.RegressionNetParams,
 		depositConfirmations: 6,
 		vmFee:                btc / 100,
-		btcFee:               btc,
+		minFeeRate:           10,
+		maxFeeRate:           10,
 		minDeposit:           btc,
 		minPegOut:            2 * btc,
 		logf:                 t.Logf,
@@ -148,7 +190,7 @@ func newHarness(t *testing.T) *harness {
 	// The consensus-created reserve.
 	coinbase := wire.NewMsgTx(1)
 	coinbase.AddTxIn(wire.NewTxIn(wire.NewOutPoint(&chainhash.Hash{}, wire.MaxPrevOutIndex), []byte{1}, nil))
-	coinbase.AddTxOut(wire.NewTxOut(9_000_000_000*btc, signers.pkScript()))
+	coinbase.AddTxOut(wire.NewTxOut(20_999_000*btc, signers.pkScript()))
 	h.vm.add(coinbase, 1)
 	return h
 }
@@ -188,6 +230,36 @@ func (h *harness) pegOut(value int64, dest destination) *wire.MsgTx {
 	return tx
 }
 
+// lastBTC is the latest transaction on Bitcoin.
+func (h *harness) lastBTC() *wire.MsgTx { return h.btc.txs[len(h.btc.txs)-1].tx }
+
+// feeOf is the network fee tx pays, from the outputs it spends.
+func (h *harness) feeOf(tx *wire.MsgTx) int64 {
+	var fee int64
+	for _, in := range tx.TxIn {
+		prev, ok := h.btc.output(in.PreviousOutPoint)
+		require.True(h.t, ok)
+		fee += prev.Value
+	}
+	for _, out := range tx.TxOut {
+		fee -= out.Value
+	}
+	return fee
+}
+
+// spends describes the peg outputs tx spends.
+func (h *harness) spends(tx *wire.MsgTx) []spent {
+	s, err := h.b.load()
+	require.NoError(h.t, err)
+	var prev []spent
+	for _, in := range tx.TxIn {
+		out, ok := h.btc.output(in.PreviousOutPoint)
+		require.True(h.t, ok)
+		prev = append(prev, spent{script: s.redeemFor[string(out.PkScript)], value: out.Value})
+	}
+	return prev
+}
+
 func (h *harness) step() string {
 	h.t.Helper()
 	did, err := h.b.step()
@@ -222,7 +294,7 @@ func TestPegInCreditsOnceAfterConfirmations(t *testing.T) {
 
 	h.btc.mine()
 	require.NotEmpty(h.step())
-	require.Equal(int64(100*btc-btc/100), paidTo(h.vm, alice))
+	require.Equal(100*btc-h.b.vmFee, paidTo(h.vm, alice))
 
 	// While the release is in the mempool, and after it is accepted,
 	// the deposit is not credited again.
@@ -253,7 +325,7 @@ func TestSpoofedReleaseTagIsIgnored(t *testing.T) {
 	h.vm.add(spoof, 1)
 
 	require.NotEmpty(h.step())
-	require.Equal(int64(100*btc-btc/100), paidTo(h.vm, alice))
+	require.Equal(100*btc-h.b.vmFee, paidTo(h.vm, alice))
 }
 
 func TestRoundTrip(t *testing.T) {
@@ -267,8 +339,9 @@ func TestRoundTrip(t *testing.T) {
 
 	req := h.pegOut(40*btc, aliceOnBTC)
 	require.NotEmpty(h.step())
-	require.Equal(int64(39*btc), paidTo(h.btc, aliceOnBTC), "40 BTC less the 1 BTC fee")
 	payment := h.btc.txs[len(h.btc.txs)-1].tx
+	require.Equal(40*btc-h.feeOf(payment), paidTo(h.btc, aliceOnBTC), "40 BTC less the network fee")
+	require.Equal(int64(10), h.b.feeRateOf(payment, h.spends(payment)), "at the policy's fee rate")
 	paidFor, ok := parsePayment(payment)
 	require.True(ok)
 	require.Equal(req.TxHash(), paidFor)
@@ -348,14 +421,14 @@ func TestTagsRoundTrip(t *testing.T) {
 
 func TestParseBTC(t *testing.T) {
 	for in, want := range map[string]int64{
-		"1": btc, "0.00000001": 1, "123.45": 12345 * btc / 100, "10000000000": 10_000_000_000 * btc,
+		"1": btc, "0.00000001": 1, "123.45": 12345 * btc / 100, "21000000": 21_000_000 * btc,
 	} {
 		got, err := parseBTC(in)
 		require.NoError(t, err, in)
 		require.Equal(t, want, got, in)
 		require.Equal(t, in, trimZeros(formatBTC(got)), in)
 	}
-	for _, bad := range []string{"", "1.2.3", "-1", "abc", "10000000001"} {
+	for _, bad := range []string{"", "1.2.3", "-1", "abc", "21000001"} {
 		_, err := parseBTC(bad)
 		require.Error(t, err, bad)
 	}
@@ -371,7 +444,7 @@ func trimZeros(s string) string {
 func (h *harness) personalDeposit(value int64, dest destination, confirmations int64) *wire.MsgTx {
 	tx := wire.NewMsgTx(1)
 	tx.AddTxIn(wire.NewTxIn(h.coin(), nil, nil))
-	tx.AddTxOut(wire.NewTxOut(value, p2shScript(h.b.signers.depositRedeemScript(dest))))
+	tx.AddTxOut(wire.NewTxOut(value, p2wshScript(h.b.signers.depositRedeemScript(dest))))
 	h.btc.add(tx, confirmations)
 	return tx
 }
@@ -402,7 +475,7 @@ func TestPersonalDepositAddress(t *testing.T) {
 	require.False(added, "registering twice is a no-op")
 
 	require.NotEmpty(h.step())
-	require.Equal(int64(100*btc-btc/100), paidTo(h.vm, alice))
+	require.Equal(100*btc-h.b.vmFee, paidTo(h.vm, alice))
 	h.vm.mine()
 	require.Empty(h.step())
 }
@@ -424,7 +497,7 @@ func TestPegOutSpendsPersonalDeposit(t *testing.T) {
 	did, err := h.b.step()
 	require.NoError(err)
 	require.NotEmpty(did)
-	require.Equal(int64(59*btc), paidTo(h.btc, aliceOnBTC))
+	require.Equal(60*btc-h.feeOf(h.btc.txs[len(h.btc.txs)-1].tx), paidTo(h.btc, aliceOnBTC))
 
 	h.btc.mine()
 	a := h.audit()
@@ -482,8 +555,8 @@ func TestRefundHeldDeposit(t *testing.T) {
 
 	_, err := h.b.refund(op, aliceOnBTC, false)
 	require.NoError(err)
-	require.Equal(int64(149*btc), paidTo(h.btc, aliceOnBTC), "150 BTC less the 1 BTC fee")
 	refundTx := h.btc.txs[len(h.btc.txs)-1].tx
+	require.Equal(150*btc-h.feeOf(refundTx), paidTo(h.btc, aliceOnBTC), "150 BTC less the network fee")
 	refunded, ok := parseRefund(refundTx)
 	require.True(ok)
 	require.Equal(op, refunded)

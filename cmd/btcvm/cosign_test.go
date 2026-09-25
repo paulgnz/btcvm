@@ -128,12 +128,12 @@ func TestSeparateSignersRoundTrip(t *testing.T) {
 	// signatures satisfy the multisig.
 	h.personalDeposit(100*btc, alice, 6)
 	require.NotEmpty(h.step())
-	require.Equal(int64(100*btc-btc/100), paidTo(h.vm, alice))
+	require.Equal(100*btc-h.b.vmFee, paidTo(h.vm, alice))
 	h.vm.mine()
 
 	h.pegOut(60*btc, aliceOnBTC)
 	require.NotEmpty(h.step())
-	require.Equal(int64(59*btc), paidTo(h.btc, aliceOnBTC))
+	require.Equal(60*btc-h.feeOf(h.lastBTC()), paidTo(h.btc, aliceOnBTC))
 	h.btc.mine()
 	require.Empty(h.step())
 
@@ -150,7 +150,7 @@ func TestOneSignerDownStillSigns(t *testing.T) {
 	_, err := registerDeposit(h.b, alice)
 	require.NoError(err)
 	require.NotEmpty(h.step())
-	require.Equal(int64(100*btc-btc/100), paidTo(h.vm, alice))
+	require.Equal(100*btc-h.b.vmFee, paidTo(h.vm, alice))
 
 	// With two down, nothing moves.
 	h.vm.mine()
@@ -210,7 +210,7 @@ func TestSignerRefusesBadProposals(t *testing.T) {
 			return r
 		}(), "BTCVM transaction"},
 		"unknown peg-out": {signRequest{
-			Chain: chainBitcoin, Tx: good.Tx,
+			Chain: chainBitcoin, Tx: good.Tx, FeeRate: 10,
 			Action: action{Kind: actionPayout, PegOut: chainhash.Hash{8}.String()},
 		}, "no final peg-out"},
 	} {
@@ -301,7 +301,7 @@ func TestSignerRefundNeedsApproval(t *testing.T) {
 
 	_, err = h.b.refund(op, back, false)
 	require.NoError(err)
-	require.Equal(int64(99*btc), paidTo(h.btc, back))
+	require.Equal(100*btc-h.feeOf(h.lastBTC()), paidTo(h.btc, back))
 }
 
 func TestSignerAuthAndDailyLimit(t *testing.T) {

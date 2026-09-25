@@ -37,7 +37,7 @@ func TestPause(t *testing.T) {
 	// Resumed: the deposit made while paused is credited.
 	require.NoError(cmdResume([]string{"-signers", setPath}))
 	require.NotEmpty(h.step())
-	require.Equal(int64(100*btc-btc/100), paidTo(h.vm, alice))
+	require.Equal(100*btc-h.b.vmFee, paidTo(h.vm, alice))
 
 	// A signer paused by its own operator refuses to sign; the other two
 	// still make 2 of 3.
@@ -49,7 +49,7 @@ func TestPause(t *testing.T) {
 	h.vm.mine()
 	h.pegOut(60*btc, h.user(2))
 	require.NotEmpty(h.step())
-	require.Equal(int64(59*btc), paidTo(h.btc, h.user(2)))
+	require.Equal(60*btc-h.feeOf(h.lastBTC()), paidTo(h.btc, h.user(2)))
 
 	// With a second signer paused, nothing moves.
 	other := t.TempDir()

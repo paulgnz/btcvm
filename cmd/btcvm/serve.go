@@ -76,6 +76,7 @@ type snapshot struct {
 	btcHeight int64
 	btcSync   btcSync
 	btcTime   int64 // when the latest Bitcoin block was found, unix seconds
+	feeRate   int64 // what a Bitcoin payout pays now, sat/vB
 	checks    []check
 	updated   time.Time
 	err       string
@@ -91,6 +92,7 @@ func (srv *server) refresh() {
 		snap.audit = srv.b.audit(state)
 	}
 	snap.checks = srv.health.run(state, err)
+	snap.feeRate = srv.b.currentFeeRate()
 	_ = srv.vm.rpc.call(&snap.vmHeight, "getblockcount")
 	_ = srv.btc.rpc.call(&snap.btcHeight, "getblockcount")
 	_ = srv.btc.rpc.call(&snap.btcSync, "getblockchaininfo")
@@ -113,6 +115,14 @@ func (srv *server) current() *snapshot {
 	srv.mu.RLock()
 	defer srv.mu.RUnlock()
 	return srv.snapshot
+}
+
+// feeRate is the payout fee rate as of the last refresh.
+func (srv *server) feeRate() int64 {
+	if snap := srv.current(); snap != nil && snap.feeRate > 0 {
+		return snap.feeRate
+	}
+	return srv.b.minFeeRate
 }
 
 type apiError struct {
@@ -169,6 +179,7 @@ func (srv *server) vmAddress(s string) (btcutil.Address, destination, error) {
 }
 
 func (srv *server) info(*http.Request) (any, error) {
+	feeRate := srv.feeRate()
 	pegAddr, err := srv.b.btcPegAddress()
 	if err != nil {
 		return nil, err
@@ -186,7 +197,9 @@ func (srv *server) info(*http.Request) (any, error) {
 		"depositConfirmations": srv.b.depositConfirmations,
 		"confirmationTiers":    tiersForAPI(srv.b.confirmationTiers),
 		"vmFee":                formatBTC(srv.b.vmFee),
-		"btcFee":               formatBTC(srv.b.btcFee),
+		"btcFeeRate":           feeRate,
+		"payoutFee":            formatBTC(srv.b.payoutFee(feeRate)),
+		"feeRateRange":         []int64{srv.b.minFeeRate, srv.b.maxFeeRate},
 		"minDeposit":           formatBTC(srv.b.minDeposit),
 		"minPegOut":            formatBTC(srv.b.minPegOut),
 		"maxDeposit":           formatBTC(srv.b.maxDeposit),
@@ -574,7 +587,7 @@ func (srv *server) pegOut(r *http.Request) (any, error) {
 		to, _ := p.dest.address(srv.b.btcParams)
 		out := map[string]any{
 			"status": "pending", "amount": formatBTC(p.value),
-			"pays": formatBTC(p.value - srv.b.btcFee), "to": to.EncodeAddress(),
+			"pays": formatBTC(snap.state.pays(srv.b, p, snap.feeRate)), "to": to.EncodeAddress(),
 		}
 		if payment, ok := snap.state.paid[p.txid]; ok {
 			out["status"] = "paid"
@@ -741,7 +754,7 @@ func cmdServe(args []string) error {
 			perAddr: newRateLimit(1, 24*time.Hour),
 			perIP:   newRateLimit(3, 24*time.Hour),
 		}
-		faucetAddr, _ := p2pkhAddress(key, s.vmParams)
+		faucetAddr, _ := keyAddress(key, s.vmParams)
 		log.Printf("faucet: %s BTC per claim from %s", formatBTC(amount), faucetAddr.EncodeAddress())
 	}
 	// Watching the peg addresses waits on Bitcoin Core, which can be slow to

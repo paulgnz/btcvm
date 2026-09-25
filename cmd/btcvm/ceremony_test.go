@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"encoding/hex"
 	"flag"
+	"github.com/MetalBlockchain/btcvm/btcd/chaincfg"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -56,7 +57,7 @@ func ceremony(t *testing.T, h *harness) (coordKey string, set *signerSet, dirs [
 			keyFile := filepath.Join(root, "import"+strconv.Itoa(i))
 			secret := hex.EncodeToString(key.Serialize())
 			if i == 2 {
-				wif, err := btcutil.NewWIF(key, &bitcoinMainNet, true)
+				wif, err := btcutil.NewWIF(key, &chaincfg.MainNetParams, true)
 				require.NoError(err)
 				secret = wif.String()
 			}
@@ -144,11 +145,11 @@ func TestSignerCeremony(t *testing.T) {
 	require.NoError(err)
 	h.personalDeposit(100*btc, alice, 6)
 	require.NotEmpty(h.step())
-	require.Equal(int64(100*btc-btc/100), paidTo(h.vm, alice))
+	require.Equal(100*btc-h.b.vmFee, paidTo(h.vm, alice))
 	h.vm.mine()
 	h.pegOut(60*btc, aliceOnBTC)
 	require.NotEmpty(h.step())
-	require.Equal(int64(59*btc), paidTo(h.btc, aliceOnBTC))
+	require.Equal(60*btc-h.feeOf(h.lastBTC()), paidTo(h.btc, aliceOnBTC))
 
 	// Requests not signed by the coordinator key are refused.
 	var status map[string]any

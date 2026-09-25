@@ -9,22 +9,17 @@ import (
 
 const satPerBTC = 1e8
 
-// Bitcoin network encodings, from Bitcoin Core's chainparams.cpp. Only the
-// fields address and key encoding use are set.
-var (
-	bitcoinMainNet = chaincfg.Params{Name: "mainnet", PubKeyHashAddrID: 30, ScriptHashAddrID: 22, PrivateKeyID: 158}
-	bitcoinTestNet = chaincfg.Params{Name: "testnet", PubKeyHashAddrID: 113, ScriptHashAddrID: 196, PrivateKeyID: 241}
-	bitcoinRegTest = chaincfg.Params{Name: "regtest", PubKeyHashAddrID: 111, ScriptHashAddrID: 196, PrivateKeyID: 239}
-)
+// maxBTC is Bitcoin's MAX_MONEY in whole BTC.
+const maxBTC = 21_000_000
 
 func bitcoinParams(network string) (*chaincfg.Params, error) {
 	switch network {
 	case "mainnet":
-		return &bitcoinMainNet, nil
+		return &chaincfg.MainNetParams, nil
 	case "testnet":
-		return &bitcoinTestNet, nil
+		return &chaincfg.TestNet3Params, nil
 	case "regtest":
-		return &bitcoinRegTest, nil
+		return &chaincfg.RegressionNetParams, nil
 	}
 	return nil, fmt.Errorf("unknown Bitcoin network %q (mainnet, testnet or regtest)", network)
 }
@@ -62,7 +57,7 @@ func parseBTC(s string) (int64, error) {
 			seenDot = true
 		case c >= '0' && c <= '9' && !seenDot:
 			whole = whole*10 + int64(c-'0')
-			if whole > 10_000_000_000 {
+			if whole > maxBTC {
 				return 0, fmt.Errorf("amount %s is too large", s)
 			}
 		case c >= '0' && c <= '9' && fracDigits < 8:

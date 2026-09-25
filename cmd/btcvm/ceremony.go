@@ -423,7 +423,8 @@ func setupAssemble(args []string) error {
 		Networks:       &setNetworks{Bitcoin: s.btcNet, BTCVM: s.vmNetwork},
 		CoordinatorKey: *coordKey,
 		Policy: &pegPolicy{
-			Confirmations: b.depositConfirmations, VMFee: b.vmFee, BTCFee: b.btcFee,
+			Confirmations: b.depositConfirmations, VMFee: b.vmFee,
+			MinFeeRate: b.minFeeRate, MaxFeeRate: b.maxFeeRate,
 			MinDeposit: b.minDeposit, MinPegOut: b.minPegOut,
 			MaxDeposit: b.maxDeposit, MaxCirculating: b.maxCirculating,
 			ConfirmationTiers: b.confirmationTiers,
@@ -571,8 +572,8 @@ func setupJoin(args []string) error {
 	fmt.Fprintf(p.out, "Coordinator key:  %s…\n", set.CoordinatorKey[:16])
 	fmt.Fprintf(p.out, "Peg address:      %s (Bitcoin)\n", btcAddr.EncodeAddress())
 	fmt.Fprintf(p.out, "Reserve:          %s (BTCVM)\n", vmAddr.EncodeAddress())
-	fmt.Fprintf(p.out, "Policy:           %d confirmations; fees %s + %s BTC; deposits %s–%s BTC; at most %s BTC circulating\n",
-		pol.Confirmations, formatBTC(pol.VMFee), formatBTC(pol.BTCFee), formatBTC(pol.MinDeposit),
+	fmt.Fprintf(p.out, "Policy:           %d confirmations; fees %s BTC + %d-%d sat/vB; deposits %s–%s BTC; at most %s BTC circulating\n",
+		pol.Confirmations, formatBTC(pol.VMFee), pol.MinFeeRate, pol.MaxFeeRate, formatBTC(pol.MinDeposit),
 		capText(pol.MaxDeposit), capText(pol.MaxCirculating))
 	fmt.Fprintf(p.out, "Fingerprint:      %s\n\n", set.fingerprint())
 
