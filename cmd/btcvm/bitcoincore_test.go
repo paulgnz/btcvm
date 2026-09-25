@@ -5,8 +5,11 @@ import (
 	"encoding/hex"
 	"fmt"
 	"net"
+	"net/http"
+	"net/http/httptest"
 	"os/exec"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -260,4 +263,52 @@ func TestBridgeRefusesNodeWithoutTxIndex(t *testing.T) {
 	require.NoError(t, c.ensureWallet())
 	_, err := c.txsFor(nil)
 	require.ErrorContains(t, err, "-txindex")
+}
+
+// TestScanFindsOldCoins scans Bitcoin Core's UTXO set for addresses, as a
+// wallet importing a wallet.dat does, and finds a coin paid to one before
+// anything watched it.
+func TestScanFindsOldCoins(t *testing.T) {
+	require := require.New(t)
+	n := startRegtest(t)
+	h := newHarness(t)
+	h.b.btcParams = &chaincfg.RegressionNetParams
+	srv := &server{b: h.b, scan: newScanner(n.settings.btcWalletClient(""))}
+
+	var addr, txid string
+	require.NoError(n.funder.call(&addr, "getnewaddress"))
+	require.NoError(n.funder.call(&txid, "sendtoaddress", addr, 0.123))
+	n.mine(1)
+
+	req := func(method, path, body string) *http.Request {
+		r := httptest.NewRequest(method, path, strings.NewReader(body))
+		r.RemoteAddr = "192.0.2.1:1234"
+		return r
+	}
+	_, err := srv.btcScan(req("POST", "/api/btc/scan", `{"addresses":["not-an-address"]}`))
+	require.Error(err)
+
+	started, err := srv.btcScan(req("POST", "/api/btc/scan", fmt.Sprintf(`{"addresses":[%q]}`, addr)))
+	require.NoError(err)
+	id := started.(map[string]any)["id"].(string)
+
+	var result map[string]any
+	require.Eventually(func() bool {
+		r := req("GET", "/api/btc/scan/"+id, "")
+		r.SetPathValue("id", id)
+		res, err := srv.btcScanStatus(r)
+		require.NoError(err)
+		result = res.(map[string]any)
+		return result["status"] != "running"
+	}, 30*time.Second, 100*time.Millisecond)
+	require.Equal("done", result["status"], "%v", result)
+	utxos := result["utxos"].([]map[string]any)
+	var found bool
+	for _, u := range utxos {
+		if u["txid"] == txid {
+			found = true
+			require.Equal("12300000", u["value"])
+		}
+	}
+	require.True(found, "%v", utxos)
 }

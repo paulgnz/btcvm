@@ -56,6 +56,8 @@ type server struct {
 	// heavy bounds concurrent explorer requests, each of which can make
 	// many RPC calls.
 	heavy chan struct{}
+	// scan finds the unspent outputs of imported addresses (btcscan.go).
+	scan *scanner
 
 	registerLimit *rateLimit
 }
@@ -738,6 +740,7 @@ func cmdServe(args []string) error {
 		chainID:       *chainID,
 		vm:            b.vm.(*vmChain),
 		btc:           b.btc.(*btcChain),
+		scan:          newScanner(b.btc.(*btcChain).rpc),
 		registerLimit: newRateLimit(30, time.Hour),
 		prevOuts:      map[wire.OutPoint]*wire.TxOut{},
 		heavy:         make(chan struct{}, 8),
@@ -835,6 +838,8 @@ func cmdServe(args []string) error {
 	mux.HandleFunc("POST /api/btc/import", handle(srv.limited(srv.btcImport)))
 	mux.HandleFunc("GET /api/btc/rawtx/{txid}", handle(srv.limited(srv.btcRawTx)))
 	mux.HandleFunc("POST /api/btc/tx", handle(srv.btcBroadcast))
+	mux.HandleFunc("POST /api/btc/scan", handle(srv.btcScan))
+	mux.HandleFunc("GET /api/btc/scan/{id}", handle(srv.btcScanStatus))
 
 	log.Printf("serving on http://%s", *listen)
 	server := &http.Server{
