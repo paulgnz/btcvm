@@ -26,3 +26,6 @@ update-key*
 /cmd/dogevm/dogevm
 /dogevm
 /dogevm-plugin
+/cmd/btcvm/btcvm
+/btcvm
+/btcvm-plugin

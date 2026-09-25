@@ -123,7 +123,7 @@ func scanLine(line string) []string {
 func upstreamVector(file string) bool {
 	switch file {
 	case "scripts/secretscan/main_test.go", // the scanner's own fake secrets
-		"cmd/dogevm/testdata/wallet-vectors.json": // keys are sha256 of public labels
+		"cmd/btcvm/testdata/wallet-vectors.json": // keys are sha256 of public labels
 		return true
 	}
 	return strings.HasPrefix(file, "btcd/") &&
