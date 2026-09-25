@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Runs DogecoinVM as an L1 on Metal mainnet, pegged to Dogecoin mainnet.
+# Runs BTCVM as an L1 on Metal mainnet, pegged to Bitcoin mainnet.
 # Run as root on a host prepared by deploy/provision.sh:
 #
 #   deploy/mainnet.sh status    # what is synced and funded
@@ -10,34 +10,35 @@
 #   - the P-Chain key in $SECRETS/p-chain-key.json holds enough METAL: about
 #     5 METAL prepays the validator's continuous fee for several months;
 #   - the peg signer set is in $SECRETS/signers.json.
-# Dogecoin Core (dogecoind-main.service) may still be syncing: deposits are
+# Bitcoin Core (bitcoind-main.service) may still be syncing: deposits are
 # credited once it has caught up. Its data directory needs room for the whole
-# chain with -txindex: about 260 GB in late 2026, and growing. On a small
-# server, attach a volume (400 GB or more) and bind-mount it at
-# /var/lib/dogecoin-main before the node starts syncing.
+# chain with -txindex: about 750 GB in late 2026, and growing. Give it a
+# 1.5 TB (or larger) NVMe volume mounted at /var/lib/bitcoin-main before the
+# node starts syncing; the first sync takes a day or more.
 #
 # Alerts go to the Slack or Discord webhook URL in $SECRETS/alert-webhook, and
 # to Telegram if $SECRETS/telegram-token and $SECRETS/telegram-chat exist; https://<domain>/api/health serves the same checks for uptime
 # monitors.
 #
 # Launch is safe to re-run; it reuses the chain it created. It caps what the
-# bridge credits (MAX_DEPOSIT and MAX_CIRCULATING, in DOGE) because one
+# bridge credits (MAX_DEPOSIT and MAX_CIRCULATING, in BTC) because one
 # process holds every peg signer key.
 set -euo pipefail
 
 STATE=/var/lib/metal-main
 SECRETS=$STATE/secrets
-BIN=/opt/dogevm/bin
-DOGE_CONF=/var/lib/dogecoin-main/dogecoin.conf
-DOMAIN=${DOMAIN:-metaldoge.com}
+BIN=/opt/btcvm/bin
+BTC_CONF=/var/lib/bitcoin-main/bitcoin.conf
+DOMAIN=${DOMAIN:-metalbtc.com}
 NODE_API=http://127.0.0.1:9660
-MAX_DEPOSIT=${MAX_DEPOSIT:-100}
-MAX_CIRCULATING=${MAX_CIRCULATING:-1000}
-CONFIRMATIONS=${CONFIRMATIONS:-20}
+MAX_DEPOSIT=${MAX_DEPOSIT:-0.01}
+MAX_CIRCULATING=${MAX_CIRCULATING:-0.1}
+CONFIRMATIONS=${CONFIRMATIONS:-6}
+TIERS=${TIERS:-0.001:1,0.005:3}
 VALIDATOR_BALANCE=${VALIDATOR_BALANCE:-5}
 
-as_dogevm() { sudo -u dogevm env HOME=/opt/dogevm "$@"; }
-koinu() { awk -v d="$1" 'BEGIN { printf "%.0f", d * 100000000 }'; }
+as_btcvm() { sudo -u btcvm env HOME=/opt/btcvm "$@"; }
+satoshis() { awk -v d="$1" 'BEGIN { printf "%.0f", d * 100000000 }'; }
 info_call() {
   curl -s -X POST -H 'content-type: application/json' \
     -d "{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"$1\",\"params\":${2:-{\}}}" "$NODE_API/ext/$3"
@@ -47,10 +48,10 @@ cmd_status() {
   echo "Metal mainnet node:  $(info_call info.getNodeID '{}' info | jq -r .result.nodeID)"
   echo "P-Chain synced:      $(info_call info.isBootstrapped '{"chain":"P"}' info | jq -r .result.isBootstrapped)"
   echo "P-Chain key:         $(jq -r .pChainAddress "$SECRETS/p-chain-key.json")"
-  echo "P-Chain balance:     $(as_dogevm "$BIN/dogevm-l1" balance -key "$SECRETS/p-chain-key.json" -uri "$NODE_API" 2>&1)"
-  local d="as_dogevm /opt/dogecoin/bin/dogecoin-cli -datadir=/var/lib/dogecoin-main"
-  echo "Dogecoin mainnet:    block $($d getblockcount) of $($d getblockchaininfo | jq .headers)"
-  echo "Peg address:         $(jq -r .dogecoinPegAddress "$SECRETS/signers.out")"
+  echo "P-Chain balance:     $(as_btcvm "$BIN/btcvm-l1" balance -key "$SECRETS/p-chain-key.json" -uri "$NODE_API" 2>&1)"
+  local d="as_btcvm /opt/bitcoin/bin/bitcoin-cli -datadir=/var/lib/bitcoin-main"
+  echo "Bitcoin mainnet:    block $($d getblockcount) of $($d getblockchaininfo | jq .headers)"
+  echo "Peg address:         $(jq -r .bitcoinPegAddress "$SECRETS/signers.out")"
   [[ -f "$STATE/chain.json" ]] && echo "L1:                  $(jq -c . "$STATE/chain.json")"
   return 0
 }
@@ -60,14 +61,14 @@ cmd_launch() {
     { echo "the Metal node has not synced the P-Chain yet"; exit 1; }
 
   local reserve builder chain subnet
-  reserve=$(jq -r .dogecoinvmReserve "$SECRETS/signers.out")
-  [[ -f "$SECRETS/builder.json" ]] || as_dogevm "$BIN/dogevm" keygen -vm-network mainnet -doge-network mainnet >"$SECRETS/builder.json"
-  builder=$(jq -r .dogecoinvmAddress "$SECRETS/builder.json")
+  reserve=$(jq -r .btcvmReserve "$SECRETS/signers.out")
+  [[ -f "$SECRETS/builder.json" ]] || as_btcvm "$BIN/btcvm" keygen -vm-network mainnet -btc-network mainnet >"$SECRETS/builder.json"
+  builder=$(jq -r .btcvmAddress "$SECRETS/builder.json")
 
   if [[ ! -f "$STATE/chain.json" ]]; then
     jq -n --arg reserve "$reserve" \
       '{config: {mainNet: true, pegReserveAddress: $reserve, pegReserveBlocks: 1}}' >"$STATE/genesis.json"
-    as_dogevm "$BIN/dogevm-l1" create -key "$SECRETS/p-chain-key.json" -genesis "$STATE/genesis.json" \
+    as_btcvm "$BIN/btcvm-l1" create -key "$SECRETS/p-chain-key.json" -genesis "$STATE/genesis.json" \
       -node-uri "$NODE_API" -validator-balance "$VALIDATOR_BALANCE" >"$STATE/chain.json.tmp"
     mv "$STATE/chain.json.tmp" "$STATE/chain.json"
   fi
@@ -76,52 +77,52 @@ cmd_launch() {
 
   # Node-local chain config: private RPC credentials, indexes, block builder.
   [[ -f "$SECRETS/rpc-password" ]] || openssl rand -hex 24 >"$SECRETS/rpc-password"
-  install -d -o dogevm -g dogevm "$STATE/chain-configs/$chain"
+  install -d -o btcvm -g btcvm "$STATE/chain-configs/$chain"
   jq -n --arg pass "$(cat "$SECRETS/rpc-password")" --arg builder "$builder" \
     --arg data "$STATE/chaindata" --arg logs "$STATE/chainlogs" \
-    '{rpcUser: "dogevm", rpcPass: $pass, rpcLimitUser: "public", rpcLimitPass: "public",
+    '{rpcUser: "btcvm", rpcPass: $pass, rpcLimitUser: "public", rpcLimitPass: "public",
       txIndex: true, addrIndex: true, miningAddrs: [$builder], dataDir: $data, logDir: $logs}' \
     >"$STATE/chain-configs/$chain/config.json"
-  chown -R dogevm:dogevm "$STATE" && chmod 700 "$SECRETS"
+  chown -R btcvm:btcvm "$STATE" && chmod 700 "$SECRETS"
 
   # Track the L1's subnet.
   if ! grep -q -- "--track-subnets=$subnet" /etc/systemd/system/metal-mainnet.service; then
     sed -i "s|--public-ip=|--track-subnets=$subnet --public-ip=|" /etc/systemd/system/metal-mainnet.service
   fi
-  # Keep the plugin current.
-  cp "/var/lib/dogevm/plugins/$(jq -r .vmID "$STATE/chain.json")" "$STATE/plugins/" 2>/dev/null || true
+  # deploy/provision.sh builds the plugin into $STATE/plugins; re-run it to
+  # update BTCVM.
 
   cat >"$SECRETS/bridge.env" <<ENV
-DOGEVM_RPC=$NODE_API/ext/bc/$chain/rpc
-DOGEVM_RPC_USER=dogevm
-DOGEVM_RPC_PASS=$(cat "$SECRETS/rpc-password")
-DOGEVM_NETWORK=mainnet
-DOGECOIN_RPC=http://127.0.0.1:22555
-DOGECOIN_RPC_USER=dogevm
-DOGECOIN_RPC_PASS=$(sed -n 's/^rpcpassword=//p' "$DOGE_CONF")
-DOGECOIN_NETWORK=mainnet
+BTCVM_RPC=$NODE_API/ext/bc/$chain/rpc
+BTCVM_RPC_USER=btcvm
+BTCVM_RPC_PASS=$(cat "$SECRETS/rpc-password")
+BTCVM_NETWORK=mainnet
+BITCOIN_RPC=http://127.0.0.1:8332
+BITCOIN_RPC_USER=btcvm
+BITCOIN_RPC_PASS=$(sed -n 's/^rpcpassword=//p' "$BTC_CONF")
+BITCOIN_NETWORK=mainnet
 ENV
-  chown dogevm:dogevm "$SECRETS/bridge.env" && chmod 600 "$SECRETS/bridge.env"
+  chown btcvm:btcvm "$SECRETS/bridge.env" && chmod 600 "$SECRETS/bridge.env"
 
   local policy="-signers $SECRETS/signers.json -confirmations $CONFIRMATIONS \
--max-deposit $(koinu "$MAX_DEPOSIT") -max-circulating $(koinu "$MAX_CIRCULATING") -doge-fee $(koinu 0.1) -confirmation-tiers 1:1,10:6,50:12"
+-max-deposit $(satoshis "$MAX_DEPOSIT") -max-circulating $(satoshis "$MAX_CIRCULATING") -min-fee-rate 1 -max-fee-rate 50 -confirmation-tiers $TIERS"
   local health="-validation-id $(jq -r .validationID "$STATE/chain.json") -pchain-uri $NODE_API/ext/bc/P"
   [[ -f "$SECRETS/alert-webhook" ]] && health="$health -webhook $(cat "$SECRETS/alert-webhook")"
   local alerts=""
   [[ -f "$SECRETS/telegram-token" && -f "$SECRETS/telegram-chat" ]] &&
     alerts="-telegram-token-file $SECRETS/telegram-token -telegram-chat $(cat "$SECRETS/telegram-chat")"
   for unit in bridge web monitor; do
-    local exec="$BIN/dogevm bridge $policy -interval 30s"
-    [[ $unit == web ]] && exec="$BIN/dogevm serve $policy ${health% -webhook*} -doge-index $STATE/dogeindex -listen 127.0.0.1:8081"
-    [[ $unit == monitor ]] && exec="$BIN/dogevm monitor $policy $health $alerts"
-    cat >"/etc/systemd/system/dogevm-$unit-main.service" <<UNIT
+    local exec="$BIN/btcvm bridge $policy -interval 30s"
+    [[ $unit == web ]] && exec="$BIN/btcvm serve $policy ${health% -webhook*} -btc-index $STATE/btcindex -listen 127.0.0.1:8081"
+    [[ $unit == monitor ]] && exec="$BIN/btcvm monitor $policy $health $alerts"
+    cat >"/etc/systemd/system/btcvm-$unit-main.service" <<UNIT
 [Unit]
-Description=DogecoinVM $unit (Metal mainnet, Dogecoin mainnet)
-After=metal-mainnet.service dogecoind-main.service
+Description=BTCVM $unit (Metal mainnet, Bitcoin mainnet)
+After=metal-mainnet.service bitcoind-main.service
 
 [Service]
-User=dogevm
-Environment=HOME=/opt/dogevm
+User=btcvm
+Environment=HOME=/opt/btcvm
 EnvironmentFile=$SECRETS/bridge.env
 ExecStart=$exec
 Restart=always
@@ -132,14 +133,14 @@ WantedBy=multi-user.target
 UNIT
   done
 
-  # metaldoge.com serves mainnet; the testnet stack is retired.
+  # metalbtc.com serves mainnet; the testnet stack is retired.
   cat >/etc/caddy/Caddyfile <<CADDY
 $DOMAIN {
 	header Strict-Transport-Security "max-age=31536000"
-	# The macOS wallet's DMGs and signed update feed (dogecoin-vm-wallet's
+	# The macOS wallet's DMGs and signed update feed (bitcoin-vm-wallet's
 	# publish-update.sh uploads them).
 	handle_path /download/* {
-		root * /var/www/metaldoge-downloads
+		root * /var/www/metalbtc-downloads
 		file_server
 	}
 	handle /rpc {
@@ -153,11 +154,11 @@ $DOMAIN {
 	}
 }
 CADDY
-  systemctl disable --now dogevm-node dogevm-bridge dogevm-web >/dev/null 2>&1 || true
+  systemctl disable --now btcvm-node btcvm-bridge btcvm-web >/dev/null 2>&1 || true
   systemctl daemon-reload
   systemctl restart metal-mainnet
-  systemctl enable --now dogevm-bridge-main dogevm-web-main dogevm-monitor-main >/dev/null
-  systemctl restart dogevm-bridge-main dogevm-web-main dogevm-monitor-main caddy
+  systemctl enable --now btcvm-bridge-main btcvm-web-main btcvm-monitor-main >/dev/null
+  systemctl restart btcvm-bridge-main btcvm-web-main btcvm-monitor-main caddy
   cmd_status
 }
 

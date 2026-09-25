@@ -15,24 +15,24 @@
 #   SOURCE      the live signer set (with private keys)
 #   STAGE       where to stage; must not exist yet. The default is inside the
 #               secrets folder, so the daily backup includes it
-#   DOGEVM      the dogevm binary
+#   BTCVM      the btcvm binary
 #   BRIDGE_ENV  node settings to give each signer
 #   REGISTRY    the bridge's deposit address registry, copied to each signer
 #   RUN_AS      the user the signers run as; empty for the current user
-#   MAX_DAILY   most DOGE each signer approves moving in 24 hours
-#   NETWORK     Dogecoin and DogecoinVM network
+#   MAX_DAILY   most satoshis each signer approves moving in 24 hours
+#   NETWORK     Bitcoin and BTCVM network
 #   POLICY      the bridge's policy flags; must match its service
 set -euo pipefail
 
 SOURCE=${SOURCE-/var/lib/metal-main/secrets/signers.json}
 STAGE=${STAGE-/var/lib/metal-main/secrets/separate-signers}
-DOGEVM=${DOGEVM-/opt/dogevm/bin/dogevm}
+BTCVM=${BTCVM-/opt/btcvm/bin/btcvm}
 BRIDGE_ENV=${BRIDGE_ENV-/var/lib/metal-main/secrets/bridge.env}
 REGISTRY=${REGISTRY-/var/lib/metal-main/secrets/deposits.json}
-RUN_AS=${RUN_AS-dogevm}
-MAX_DAILY=${MAX_DAILY-1000}
+RUN_AS=${RUN_AS-btcvm}
+MAX_DAILY=${MAX_DAILY-10000000}
 NETWORK=${NETWORK-mainnet}
-POLICY=${POLICY--confirmations 20 -confirmation-tiers 1:1,10:6,50:12 -max-deposit 10000000000 -max-circulating 100000000000 -doge-fee 10000000}
+POLICY=${POLICY--confirmations 6 -confirmation-tiers 0.001:1,0.005:3 -max-deposit 1000000 -max-circulating 10000000 -min-fee-rate 1 -max-fee-rate 50}
 
 die() { echo "stage-signers: $*" >&2; exit 1; }
 as() { if [ -n "$RUN_AS" ]; then sudo -u "$RUN_AS" "$@"; else "$@"; fi; }
@@ -40,7 +40,7 @@ json() { python3 -c "import json,sys; print(json.load(sys.stdin)$1)"; }
 
 [ -e "$STAGE" ] && die "$STAGE already exists; remove it to stage again"
 [ -r "$SOURCE" ] || die "can't read $SOURCE"
-[ -x "$DOGEVM" ] || die "can't run $DOGEVM"
+[ -x "$BTCVM" ] || die "can't run $BTCVM"
 [ -r "$BRIDGE_ENV" ] || die "can't read $BRIDGE_ENV"
 command -v python3 >/dev/null || die "needs python3"
 
@@ -57,19 +57,19 @@ cards=()
 for ((i = 0; i < total; i++)); do
   n=$((i + 1))
   python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["privateKeys"][int(sys.argv[2])])' "$SOURCE" "$i" |
-    as "$DOGEVM" signer-setup init -yes -dir "$STAGE/signer$n" -name "Signer $n" \
+    as "$BTCVM" signer-setup init -yes -dir "$STAGE/signer$n" -name "Signer $n" \
       -url "http://127.0.0.1:970$n" -import-key-stdin 2>/dev/null >/dev/null
   cards+=("$STAGE/signer$n/card.json")
 done
 
 # 2. The coordinator's key, and the signer set.
-coord=$(as "$DOGEVM" signer-setup coordinator -yes -dir "$STAGE/coordinator" 2>/dev/null | json '["coordinatorKey"]')
+coord=$(as "$BTCVM" signer-setup coordinator -yes -dir "$STAGE/coordinator" 2>/dev/null | json '["coordinatorKey"]')
 # shellcheck disable=SC2086 # POLICY is a list of flags
-summary=$(as "$DOGEVM" signer-setup assemble -yes -required "$required" -coordinator-key "$coord" \
-  -doge-network "$NETWORK" -vm-network "$NETWORK" $POLICY \
+summary=$(as "$BTCVM" signer-setup assemble -yes -required "$required" -coordinator-key "$coord" \
+  -btc-network "$NETWORK" -vm-network "$NETWORK" $POLICY \
   -out "$STAGE/signers.json" -cosigners-out "$STAGE/cosigners.json" "${cards[@]}" 2>/dev/null)
 fingerprint=$(echo "$summary" | json '["fingerprint"]')
-peg=$(echo "$summary" | json '["dogecoinPegAddress"]')
+peg=$(echo "$summary" | json '["bitcoinPegAddress"]')
 
 # 3. The same keys in the same order, so the same peg address.
 python3 - "$SOURCE" "$STAGE/signers.json" <<'EOF' || die "the staged set's keys differ from the live set's; stopped"
@@ -84,12 +84,12 @@ EOF
 for ((i = 0; i < total; i++)); do
   n=$((i + 1))
   dir="$STAGE/signer$n"
-  as "$DOGEVM" signer-setup join -yes -dir "$dir" -signers "$STAGE/signers.json" -fingerprint "$fingerprint" \
-    -listen "127.0.0.1:970$n" -max-daily "$MAX_DAILY" -bin "$DOGEVM" -user "${RUN_AS:-$(id -un)}" 2>/dev/null >/dev/null
-  grep -E '^(DOGEVM|DOGECOIN)_' "$BRIDGE_ENV" | as tee "$dir/signer.env" >/dev/null
+  as "$BTCVM" signer-setup join -yes -dir "$dir" -signers "$STAGE/signers.json" -fingerprint "$fingerprint" \
+    -listen "127.0.0.1:970$n" -max-daily "$MAX_DAILY" -bin "$BTCVM" -user "${RUN_AS:-$(id -un)}" 2>/dev/null >/dev/null
+  grep -E '^(BTCVM|BITCOIN)_' "$BRIDGE_ENV" | as tee "$dir/signer.env" >/dev/null
   as chmod 600 "$dir/signer.env"
   [ -r "$REGISTRY" ] && as cp "$REGISTRY" "$dir/deposits.json" && as chmod 600 "$dir/deposits.json"
-  as mv "$dir/dogevm-signer.service" "$dir/dogevm-signer-$n.service"
+  as mv "$dir/btcvm-signer.service" "$dir/btcvm-signer-$n.service"
 done
 
 cat <<EOF

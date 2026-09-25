@@ -4,16 +4,16 @@
   <link rel="manifest" href="manifest.webmanifest">
   <link rel="apple-touch-icon" href="apple-touch-icon.png">
   <meta name="theme-color" content="#16233a">
-  <meta name="apple-mobile-web-app-title" content="DogecoinVM">
+  <meta name="apple-mobile-web-app-title" content="BTCVM">
   <meta property="og:type" content="website">
-  <meta property="og:url" content="https://metaldoge.com/">
-  <meta property="og:title" content="DogecoinVM bridge">
-  <meta property="og:description" content="Move DOGE between Dogecoin and DogecoinVM on Metal Blockchain, one for one.">
-  <meta property="og:image" content="https://metaldoge.com/og.png">
+  <meta property="og:url" content="https://metalbtc.com/">
+  <meta property="og:title" content="BTCVM bridge">
+  <meta property="og:description" content="Move BTC between Bitcoin and BTCVM on Metal Blockchain, one for one.">
+  <meta property="og:image" content="https://metalbtc.com/og.png">
   <meta property="og:image:width" content="1200">
   <meta property="og:image:height" content="630">
   <meta name="twitter:card" content="summary_large_image">
-  <meta name="twitter:image" content="https://metaldoge.com/og.png">
+  <meta name="twitter:image" content="https://metalbtc.com/og.png">
   <link rel="stylesheet" href="app.css">
   <script type="module" src="app.js"></script>
 {{end}}
@@ -23,32 +23,32 @@
 
   <section class="intro" id="intro" aria-labelledby="hero-title">
     <div class="intro-text">
-      <h1 class="hero-title" id="hero-title">Use DOGE on DogecoinVM <span class="beta-pill" id="network-name">beta</span></h1>
-      <p class="pitch">DogecoinVM is a Dogecoin-compatible chain running on Metal Blockchain. Move DOGE over one for one, pay in seconds, and move it back to Dogecoin.</p>
+      <h1 class="hero-title" id="hero-title">Use BTC on BTCVM <span class="beta-pill" id="network-name">beta</span></h1>
+      <p class="pitch">BTCVM is a Bitcoin-compatible chain running on Metal Blockchain. Move BTC over one for one, pay in seconds, and move it back to Bitcoin.</p>
     </div>
     <dl class="heights" aria-label="Latest blocks">
-      <div class="height height-doge"><dt>Dogecoin</dt><dd id="doge-height">…</dd><span class="sync-meter" id="sync-meter" hidden><span id="sync-fill"></span></span><span class="sync-of" id="sync-of" hidden></span></div>
-      <div class="height height-vm"><dt>DogecoinVM</dt><dd id="vm-height">…</dd><span class="sync-of" id="vm-finality" title="Measured live: from when this site receives a payment to when the block holding it is accepted, which on DogecoinVM is final." hidden></span></div>
+      <div class="height height-btc"><dt>Bitcoin</dt><dd id="btc-height">…</dd><span class="sync-meter" id="sync-meter" hidden><span id="sync-fill"></span></span><span class="sync-of" id="sync-of" hidden></span></div>
+      <div class="height height-vm"><dt>BTCVM</dt><dd id="vm-height">…</dd><span class="sync-of" id="vm-finality" title="Measured live: from when this site receives a payment to when the block holding it is accepted, which on BTCVM is final." hidden></span></div>
     </dl>
     <ol class="steps">
-      <li><span><strong>Deposit</strong> DOGE from any Dogecoin wallet, or move it in one click from this wallet.</span></li>
-      <li><span><strong>Use it</strong> on DogecoinVM, where a payment is final in seconds.</span></li>
-      <li><span><strong>Withdraw</strong> back to Dogecoin. The bridge pays it once it's final on DogecoinVM.</span></li>
+      <li><span><strong>Deposit</strong> BTC from any Bitcoin wallet, or move it in one click from this wallet.</span></li>
+      <li><span><strong>Use it</strong> on BTCVM, where a payment is final in seconds.</span></li>
+      <li><span><strong>Withdraw</strong> back to Bitcoin. The bridge pays it once it's final on BTCVM.</span></li>
     </ol>
   </section>
 
   <main class="layout" id="home">
     <aside class="peg" aria-labelledby="peg-title">
       <h2 id="peg-title">The peg</h2>
-      <p class="peg-lede">Every DOGE on DogecoinVM is backed by DOGE locked on Dogecoin. The peg is fully backed while the locked bar is at least as long as the circulating one.</p>
+      <p class="peg-lede">Every BTC on BTCVM is backed by BTC locked on Bitcoin. The peg is fully backed while the locked bar is at least as long as the circulating one.</p>
       <div class="gauge" id="gauge">
-        <div class="gauge-row gauge-doge">
-          <span class="gauge-label">Locked on Dogecoin</span>
+        <div class="gauge-row gauge-btc">
+          <span class="gauge-label">Locked on Bitcoin</span>
           <span class="gauge-bar"><span class="gauge-fill" id="locked-fill"></span></span>
           <span class="gauge-value amount" id="locked">…</span>
         </div>
         <div class="gauge-row gauge-vm">
-          <span class="gauge-label">Circulating on DogecoinVM</span>
+          <span class="gauge-label">Circulating on BTCVM</span>
           <span class="gauge-bar"><span class="gauge-fill" id="circulating-fill"></span></span>
           <span class="gauge-value amount" id="circulating">…</span>
         </div>
@@ -59,9 +59,9 @@
         <div><dt>Deposits waiting to be credited</dt><dd class="amount" id="pending-in">…</dd></div>
         <div><dt>Withdrawals waiting to be paid</dt><dd class="amount" id="pending-out">…</dd></div>
       </dl>
-      <dl class="peg-pending peg-supply" id="doge-supply" hidden>
-        <div><dt>All DOGE in existence</dt><dd class="amount" id="supply-total">…</dd></div>
-        <div><dt>Share on DogecoinVM</dt><dd class="amount" id="supply-share">…</dd></div>
+      <dl class="peg-pending peg-supply" id="btc-supply" hidden>
+        <div><dt>All BTC in existence</dt><dd class="amount" id="supply-total">…</dd></div>
+        <div><dt>Share on BTCVM</dt><dd class="amount" id="supply-share">…</dd></div>
       </dl>
       <p class="peg-signers" id="signers"></p>
       <p class="peg-more"><a href="/explorer">See every locked output in the explorer</a></p>
@@ -89,7 +89,7 @@
 
         <div id="no-key">
           <h2>Start with a key</h2>
-          <p>Your key stays in this browser and nowhere else. Back it up once you have it: if this browser's data is cleared, the key and its DOGE are gone.</p>
+          <p>Your key stays in this browser and nowhere else. Back it up once you have it: if this browser's data is cleared, the key and its BTC are gone.</p>
           <p class="result" id="wallet-start" aria-live="polite">Loading the bridge…</p>
           <div class="actions">
             <button class="primary" id="create-key" disabled>Create a new key</button>
@@ -97,7 +97,7 @@
           <form id="import-form" class="stack">
             <label for="import-key">Or import a key you already have (WIF, hex, or a passkey backup)</label>
             <div class="inline">
-              <input id="import-key" autocomplete="off" spellcheck="false" placeholder="c…, 9… or 64 hex characters">
+              <input id="import-key" autocomplete="off" spellcheck="false" placeholder="K…, L… or 64 hex characters">
               <button type="submit" id="import-submit" disabled>Import key</button>
             </div>
           </form>
@@ -108,16 +108,16 @@
             <p class="account-label" id="address-label">Your address</p>
             <p class="address"><span id="my-address"></span> <button class="copy" data-copy="my-address" aria-label="Copy your address">Copy</button></p>
             <p class="address-note" id="address-note"></p>
-            <p class="address address-doge" id="doge-address-line" hidden>On Dogecoin: <span id="my-doge-address"></span> <button class="copy" data-copy="my-doge-address" aria-label="Copy your Dogecoin address">Copy</button></p>
+            <p class="address address-btc" id="btc-address-line" hidden>On Bitcoin: <span id="my-btc-address"></span> <button class="copy" data-copy="my-btc-address" aria-label="Copy your Bitcoin address">Copy</button></p>
             <div class="balances">
-              <div class="balance-tile tile-doge">
-                <p class="tile-label">On Dogecoin</p>
-                <p class="balance"><span class="amount" id="doge-balance">…</span> <span class="unit">DOGE</span></p>
-                <p class="balance-pending" id="doge-pending"></p>
+              <div class="balance-tile tile-btc">
+                <p class="tile-label">On Bitcoin</p>
+                <p class="balance"><span class="amount" id="btc-balance">…</span> <span class="unit">BTC</span></p>
+                <p class="balance-pending" id="btc-pending"></p>
               </div>
               <div class="balance-tile tile-vm">
-                <p class="tile-label">On DogecoinVM</p>
-                <p class="balance"><span class="amount" id="balance">…</span> <span class="unit">DOGE</span></p>
+                <p class="tile-label">On BTCVM</p>
+                <p class="balance"><span class="amount" id="balance">…</span> <span class="unit">BTC</span></p>
                 <p class="balance-pending" id="balance-pending"></p>
               </div>
             </div>
@@ -149,25 +149,25 @@
 
           <section class="history">
             <h2>Recent activity</h2>
-            <h3 class="history-chain chain-vm">On DogecoinVM</h3>
+            <h3 class="history-chain chain-vm">On BTCVM</h3>
             <ol id="history"></ol>
-            <h3 class="history-chain chain-doge">On Dogecoin</h3>
-            <ol id="doge-history"></ol>
-            <details class="doge-import" id="doge-import" hidden>
-              <summary>Missing an older Dogecoin payment?</summary>
-              <p>This wallet sees Dogecoin payments from when it first opened. Add an earlier one by its transaction ID, and the bridge's own Dogecoin node checks it.</p>
-              <form id="doge-import-form" class="inline">
-                <input id="doge-import-txid" autocomplete="off" spellcheck="false" placeholder="Transaction ID" aria-label="Transaction ID" required>
+            <h3 class="history-chain chain-btc">On Bitcoin</h3>
+            <ol id="btc-history"></ol>
+            <details class="btc-import" id="btc-import" hidden>
+              <summary>Missing an older Bitcoin payment?</summary>
+              <p>This wallet sees Bitcoin payments from when it first opened. Add an earlier one by its transaction ID, and the bridge's own Bitcoin node checks it.</p>
+              <form id="btc-import-form" class="inline">
+                <input id="btc-import-txid" autocomplete="off" spellcheck="false" placeholder="Transaction ID" aria-label="Transaction ID" required>
                 <button type="submit">Add payment</button>
               </form>
-              <p class="result" id="doge-import-result" aria-live="polite"></p>
+              <p class="result" id="btc-import-result" aria-live="polite"></p>
             </details>
           </section>
 
           <details class="key-details" id="key-details">
             <summary>Show or remove your key</summary>
-            <p>Back this up to use the same key elsewhere, for example with <code>dogevm</code>. The Dogecoin encoding imports into Dogecoin Core.</p>
-            <p class="secret" id="secrets" hidden>DogecoinVM: <code id="wif-vm"></code><br>Dogecoin: <code id="wif-doge"></code></p>
+            <p>Back this up to use the same key elsewhere, for example with <code>btcvm</code>. The Bitcoin encoding imports into Bitcoin Core.</p>
+            <p class="secret" id="secrets" hidden>BTCVM: <code id="wif-vm"></code><br>Bitcoin: <code id="wif-btc"></code></p>
             <button class="danger" id="forget-key">Remove key from this browser</button>
           </details>
         </div>
@@ -175,18 +175,18 @@
 
       <!-- Send -->
       <div class="panel" role="tabpanel" id="panel-send" aria-labelledby="tab-send" hidden>
-        <h2>Send DOGE</h2>
+        <h2>Send BTC</h2>
         <p class="needs-key">Create or import a key on the Wallet tab first.</p>
         <form id="send-form" class="stack with-key">
           <fieldset class="network-choice">
             <legend>Send on</legend>
-            <label><input type="radio" name="send-network" value="vm" checked> DogecoinVM <span class="muted">final in seconds</span></label>
-            <label><input type="radio" name="send-network" value="doge"> Dogecoin <span class="muted">a confirmation about every minute</span></label>
+            <label><input type="radio" name="send-network" value="vm" checked> BTCVM <span class="muted">final in seconds</span></label>
+            <label><input type="radio" name="send-network" value="btc"> Bitcoin <span class="muted">a block about every 10 minutes</span></label>
           </fieldset>
           <div class="available" id="send-available" aria-live="polite"></div>
           <label for="send-to">To address</label>
           <input id="send-to" autocomplete="off" spellcheck="false" required>
-          <label for="send-amount">Amount (DOGE)</label>
+          <label for="send-amount">Amount (BTC)</label>
           <input id="send-amount" inputmode="decimal" autocomplete="off" required>
           <button class="primary" type="submit">Send</button>
           <p class="result" id="send-result" aria-live="polite"></p>
@@ -195,48 +195,48 @@
 
       <!-- Deposit -->
       <div class="panel" role="tabpanel" id="panel-deposit" aria-labelledby="tab-deposit" hidden>
-        <h2>Move DOGE to DogecoinVM</h2>
-        <p class="route"><span class="route-chain route-doge">Dogecoin</span><span class="route-arrow" aria-hidden="true">→</span><span class="route-chain route-vm">DogecoinVM</span><span class="visually-hidden">: DOGE moves from Dogecoin to DogecoinVM</span></p>
-        <p class="route-lede">A deposit brings DOGE from Dogecoin onto DogecoinVM, one for one. It arrives in your DogecoinVM balance once Dogecoin has confirmed it enough for its size: <span id="confs-needed-top">…</span>. Each confirmation takes about a minute.</p>
+        <h2>Move BTC to BTCVM</h2>
+        <p class="route"><span class="route-chain route-btc">Bitcoin</span><span class="route-arrow" aria-hidden="true">→</span><span class="route-chain route-vm">BTCVM</span><span class="visually-hidden">: BTC moves from Bitcoin to BTCVM</span></p>
+        <p class="route-lede">A deposit brings BTC from Bitcoin onto BTCVM, one for one. It arrives in your BTCVM balance once Bitcoin has confirmed it enough for its size: <span id="confs-needed-top">…</span>. Bitcoin makes a block about every 10 minutes, at random, so each confirmation takes about that long.</p>
         <p class="needs-key">Create or import a key on the Wallet tab first.</p>
         <div class="with-key">
           <p class="notice" id="deposit-sync" hidden></p>
           <form id="move-form" class="stack move-form">
-            <h3>From your Dogecoin balance</h3>
-            <p class="muted" id="move-available">Your Dogecoin balance appears on the Wallet tab.</p>
-            <label for="move-amount">Amount (DOGE)</label>
+            <h3>From your Bitcoin balance</h3>
+            <p class="muted" id="move-available">Your Bitcoin balance appears on the Wallet tab.</p>
+            <label for="move-amount">Amount (BTC)</label>
             <input id="move-amount" inputmode="decimal" autocomplete="off" required>
-            <button class="primary" type="submit">Move to DogecoinVM</button>
+            <button class="primary" type="submit">Move to BTCVM</button>
             <p class="result" id="move-result" aria-live="polite"></p>
           </form>
-          <h3>Or from any Dogecoin wallet or exchange</h3>
-          <p>Send DOGE on Dogecoin to your deposit address below. Once it has enough confirmations (above), it arrives in your DogecoinVM balance, less a <span id="vm-fee">…</span> DOGE fee. The minimum is <span id="min-deposit">…</span> DOGE.<span id="deposit-limits"></span></p>
+          <h3>Or from any Bitcoin wallet or exchange</h3>
+          <p>Send BTC on Bitcoin to your deposit address below. Once it has enough confirmations (above), it arrives in your BTCVM balance, less a <span id="vm-fee">…</span> BTC fee. The minimum is <span id="min-deposit">…</span> BTC.<span id="deposit-limits"></span></p>
           <div class="deposit-address">
             <div id="deposit-qr" class="qr" aria-hidden="true"></div>
             <div>
-              <p class="account-label">Your deposit address, on Dogecoin</p>
-              <p class="address address-doge"><span id="deposit-address">…</span> <button class="copy" data-copy="deposit-address" aria-label="Copy your Dogecoin deposit address">Copy</button></p>
+              <p class="account-label">Your deposit address, on Bitcoin</p>
+              <p class="address address-btc"><span id="deposit-address">…</span> <button class="copy" data-copy="deposit-address" aria-label="Copy your Bitcoin deposit address">Copy</button></p>
               <p class="verified" id="deposit-verified" aria-live="polite"></p>
-              <p class="deposit-note">This is only for deposits. DOGE sent to your wallet address stays on Dogecoin, in your Dogecoin balance.</p>
+              <p class="deposit-note">This is only for deposits. BTC sent to your wallet address stays on Bitcoin, in your Bitcoin balance.</p>
             </div>
           </div>
           <h3>Your deposits</h3>
-          <ol id="deposits" class="transfers"><li class="empty">No deposits yet. They show up here once Dogecoin sees them.</li></ol>
+          <ol id="deposits" class="transfers"><li class="empty">No deposits yet. They show up here once Bitcoin sees them.</li></ol>
         </div>
       </div>
 
       <!-- Withdraw -->
       <div class="panel" role="tabpanel" id="panel-withdraw" aria-labelledby="tab-withdraw" hidden>
-        <h2>Move DOGE back to Dogecoin</h2>
-        <p class="route"><span class="route-chain route-vm">DogecoinVM</span><span class="route-arrow" aria-hidden="true">→</span><span class="route-chain route-doge">Dogecoin</span><span class="visually-hidden">: DOGE moves from DogecoinVM to Dogecoin</span></p>
+        <h2>Move BTC back to Bitcoin</h2>
+        <p class="route"><span class="route-chain route-vm">BTCVM</span><span class="route-arrow" aria-hidden="true">→</span><span class="route-chain route-btc">Bitcoin</span><span class="visually-hidden">: BTC moves from BTCVM to Bitcoin</span></p>
         <p class="needs-key">Create or import a key on the Wallet tab first.</p>
         <form id="withdraw-form" class="stack with-key">
-          <p>The bridge pays your Dogecoin address once the withdrawal is in a DogecoinVM block, less a <span id="doge-fee">…</span> DOGE Dogecoin fee. The minimum is <span id="min-pegout">…</span> DOGE.</p>
+          <p>The bridge pays your Bitcoin address once the withdrawal is final on BTCVM, in seconds, less the Bitcoin network fee, about <span id="btc-fee">…</span> BTC today. The payment then confirms in the next Bitcoin block it makes, usually about 10 minutes. The minimum is <span id="min-pegout">…</span> BTC.</p>
           <div class="available available-vm" id="withdraw-available" aria-live="polite"></div>
-          <label for="withdraw-to">To Dogecoin address</label>
+          <label for="withdraw-to">To Bitcoin address</label>
           <input id="withdraw-to" autocomplete="off" spellcheck="false" required>
-          <button type="button" class="link-button" id="withdraw-to-mine">Use my Dogecoin address</button>
-          <label for="withdraw-amount">Amount (DOGE)</label>
+          <button type="button" class="link-button" id="withdraw-to-mine">Use my Bitcoin address</button>
+          <label for="withdraw-amount">Amount (BTC)</label>
           <input id="withdraw-amount" inputmode="decimal" autocomplete="off" required>
           <button class="primary" type="submit">Withdraw</button>
           <p class="result" id="withdraw-result" aria-live="polite"></p>
@@ -246,13 +246,13 @@
 
       <!-- Faucet -->
       <div class="panel" role="tabpanel" id="panel-faucet" aria-labelledby="tab-faucet" hidden>
-        <h2>Get DOGE to try DogecoinVM</h2>
+        <h2>Get BTC to try BTCVM</h2>
         <p class="needs-key">Create or import a key on the Wallet tab first.</p>
         <div class="with-key">
           <p id="faucet-text"></p>
-          <button class="primary" id="faucet-claim">Get DOGE</button>
+          <button class="primary" id="faucet-claim">Get BTC</button>
           <p class="result" id="faucet-result" aria-live="polite"></p>
-          <p>To try the bridge itself, send DOGE from Dogecoin to your address on the Deposit tab.</p>
+          <p>To try the bridge itself, send BTC from Bitcoin to your address on the Deposit tab.</p>
         </div>
       </div>
     </section>

@@ -2,7 +2,7 @@ package main
 
 // The web wallet's Bitcoin side: balances, history and sending for the
 // user's own Bitcoin address, from the same key as their BTCVM
-// address. Addresses are registered with the index (dogeindex.go) first.
+// address. Addresses are registered with the index (btcindex.go) first.
 
 import (
 	"encoding/hex"

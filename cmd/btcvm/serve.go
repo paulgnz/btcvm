@@ -709,7 +709,7 @@ func cmdServe(args []string) error {
 	faucetKey := flags.String("faucet-key", "", "private key (WIF or hex) of the faucet's BTCVM address; empty disables the faucet")
 	faucetAmount := flags.String("faucet-amount", "100", "BTC per faucet claim")
 	chainID := flags.String("chain-id", "", "the BTCVM chain's ID on Metal, shown on the page")
-	btcIndexPath := flags.String("btc-index", "", "directory for the wallet's Bitcoin address index (default: dogeindex next to -signers; \"off\" disables Bitcoin balances)")
+	btcIndexPath := flags.String("btc-index", "", "directory for the wallet's Bitcoin address index (default: btcindex next to -signers; \"off\" disables Bitcoin balances)")
 	s.register(flags)
 	b := bridgeFlags(flags)
 	health := &healthChecker{b: b}
@@ -781,7 +781,7 @@ func cmdServe(args []string) error {
 	go srv.watchSupply()
 	if *btcIndexPath != "off" {
 		if *btcIndexPath == "" {
-			*btcIndexPath = filepath.Join(filepath.Dir(*signersPath), "dogeindex")
+			*btcIndexPath = filepath.Join(filepath.Dir(*signersPath), "btcindex")
 		}
 		idx, err := openBTCIndex(*btcIndexPath, srv.btc)
 		if err != nil {

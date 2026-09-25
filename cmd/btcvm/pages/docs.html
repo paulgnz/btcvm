@@ -3,8 +3,8 @@
 {{end}}
 {{define "main"}}
   <main class="page">
-    <h1>How DogecoinVM works</h1>
-    <p class="lede">DogecoinVM is a Dogecoin-compatible chain running on Metal Blockchain, joined to Dogecoin by a one-for-one DOGE bridge. This page covers how DOGE moves, what it costs, and what you're trusting.</p>
+    <h1>How BTCVM works</h1>
+    <p class="lede">BTCVM is a Bitcoin-compatible chain running on Metal Blockchain, joined to Bitcoin by a one-for-one BTC bridge. This page covers how BTC moves, what it costs, and what you're trusting.</p>
 
     <nav class="toc" aria-label="On this page">
       <a href="#chain">The chain</a>
@@ -17,79 +17,79 @@
     </nav>
 
     <h2 id="chain">The chain</h2>
-    <p>DogecoinVM uses Dogecoin's transaction format and script language, and Dogecoin Core 1.14's fee and dust rules, without SegWit. It runs as its own Layer 1 on Metal Blockchain, whose Snowman consensus makes a transaction final as soon as it is in a block, in about two seconds. There are no reorganisations to wait out.</p>
-    <p>A key has the same address on Dogecoin and on DogecoinVM. The two balances are separate: coins on one network move to the other only through the bridge.</p>
+    <p>BTCVM uses Bitcoin's transaction format, script language and consensus rules, with SegWit and Taproot active from its first block, and Bitcoin Core's standard relay and dust rules. It runs as its own Layer 1 on Metal Blockchain, whose Snowman consensus makes a transaction final as soon as it is in a block, typically within a couple of seconds. There are no reorganisations to wait out, and no mining: BTC exists on BTCVM only through the bridge's peg reserve.</p>
+    <p>A key has the same address on Bitcoin and on BTCVM, whatever the address type: 1…, 3…, bc1q… or bc1p…. The wallets use native SegWit (bc1q…) addresses. The two balances are separate: coins on one network move to the other only through the bridge.</p>
 
     <h2 id="bridge">The bridge</h2>
-    <h3>Deposits: Dogecoin to DogecoinVM</h3>
-    <p>Every wallet gets its own Dogecoin deposit address. Its script names your DogecoinVM address and is spendable only by the peg signers, so the bridge knows who to credit and nobody else can move the coins. Your wallet derives this address itself from the signers' public keys and refuses to show one that doesn't match. Once Dogecoin has confirmed it enough for its size (<span data-info="confirmationTiers">…</span>), the same amount, less the bridge fee, is released to you on DogecoinVM from the peg reserve.</p>
-    <p>The web wallet and the Mac app can make the deposit for you from your Dogecoin balance. You can also send to your deposit address from any Dogecoin wallet or exchange.</p>
-    <h3>Withdrawals: DogecoinVM to Dogecoin</h3>
-    <p>A withdrawal sends DOGE back to the peg reserve with a note naming a Dogecoin address. Once it's final on DogecoinVM, the signers pay that address from the DOGE locked on Dogecoin, less the Dogecoin network fee.</p>
+    <h3>Deposits: Bitcoin to BTCVM</h3>
+    <p>Every wallet gets its own Bitcoin deposit address, a bc1q… address. Its script names your BTCVM address and is spendable only by the peg signers, so the bridge knows who to credit and nobody else can move the coins. Your wallet derives this address itself from the signers' public keys and refuses to show one that doesn't match. Once Bitcoin has confirmed it enough for its size (<span data-info="confirmationTiers">…</span>), the same amount, less the bridge fee, is released to you on BTCVM from the peg reserve.</p>
+    <p>The web wallet can make the deposit for you from your Bitcoin balance. You can also send to your deposit address from any Bitcoin wallet or exchange.</p>
+    <h3>Withdrawals: BTCVM to Bitcoin</h3>
+    <p>A withdrawal sends BTC back to the peg reserve with a note naming a Bitcoin address. Once it's final on BTCVM, the signers pay that address from the BTC locked on Bitcoin, less the Bitcoin network fee at Bitcoin's current fee rate. Payouts are replaceable (BIP125): if one is still unconfirmed after 30 minutes and fees have risen, the bridge replaces it with one paying the current rate. The replacement spends the same coins, so the withdrawal can only be paid once.</p>
     <h3>Proof of reserves</h3>
-    <p>Every DOGE on DogecoinVM is backed by DOGE locked on Dogecoin. The <a href="/explorer">explorer</a> lists every locked output, each linked to a public Dogecoin explorer, next to the amount circulating on DogecoinVM. The bridge refuses to move anything unless the locked DOGE covers what circulates plus what's pending.</p>
+    <p>Every BTC on BTCVM is backed by BTC locked on Bitcoin. The <a href="/explorer">explorer</a> lists every locked output, each linked to a public Bitcoin explorer, next to the amount circulating on BTCVM. The bridge refuses to move anything unless the locked BTC covers what circulates plus what's pending.</p>
 
     <h2 id="fees">Fees, limits and timings</h2>
     <p>Live from the bridge:</p>
     <dl class="facts-list" id="live-facts">
-      <dt>Confirmations before a deposit is credited</dt><dd><span data-info="confirmationTiers">…</span>. Each takes about a minute; smaller deposits carry less risk, so they wait less.</dd>
-      <dt>Bridge fee on each deposit</dt><dd><span data-info="vmFee" data-doge>…</span> DOGE</dd>
-      <dt>Dogecoin fee on each withdrawal</dt><dd><span data-info="dogeFee" data-doge>…</span> DOGE</dd>
-      <dt>Smallest deposit</dt><dd><span data-info="minDeposit" data-doge>…</span> DOGE</dd>
-      <dt>Largest deposit (beta)</dt><dd><span data-info="maxDeposit" data-doge>…</span> DOGE; larger ones are held for a refund</dd>
-      <dt>Most DOGE on DogecoinVM in total (beta)</dt><dd><span data-info="maxCirculating" data-doge>…</span> DOGE</dd>
-      <dt>Smallest withdrawal</dt><dd><span data-info="minPegOut" data-doge>…</span> DOGE</dd>
+      <dt>Confirmations before a deposit is credited</dt><dd><span data-info="confirmationTiers">…</span>. A Bitcoin block comes about every 10 minutes, at random; smaller deposits carry less risk, so they wait less.</dd>
+      <dt>Bridge fee on each deposit</dt><dd><span data-info="vmFee" data-btc>…</span> BTC</dd>
+      <dt>Bitcoin network fee on each withdrawal</dt><dd>about <span data-info="payoutFee" data-btc>…</span> BTC today, at <span data-info="btcFeeRate">…</span> sat/vB; it follows Bitcoin's fee rate</dd>
+      <dt>Smallest deposit</dt><dd><span data-info="minDeposit" data-btc>…</span> BTC</dd>
+      <dt>Largest deposit (beta)</dt><dd><span data-info="maxDeposit" data-btc>…</span> BTC; larger ones are held for a refund</dd>
+      <dt>Most BTC on BTCVM in total (beta)</dt><dd><span data-info="maxCirculating" data-btc>…</span> BTC</dd>
+      <dt>Smallest withdrawal</dt><dd><span data-info="minPegOut" data-btc>…</span> BTC</dd>
       <dt>Signers</dt><dd><span data-info="signers">…</span></dd>
-      <dt>Peg address on Dogecoin</dt><dd><code data-info="pegAddress">…</code></dd>
+      <dt>Peg address on Bitcoin</dt><dd><code data-info="pegAddress">…</code></dd>
     </dl>
-    <p>Sending on DogecoinVM costs Dogecoin's usual 0.01 DOGE per kilobyte, a fraction of a DOGE, and is final in about two seconds. A Dogecoin block comes about every minute.</p>
-    <p>That speed is measured live. For every payment sent through this site, the bridge times how long it takes from receiving the payment to accepting the block that holds it. On DogecoinVM, an accepted block is final. It checks four times a second, so a figure can be up to a quarter of a second slow, never fast. The home page shows the median of the last 50 payments, and <code>/api/status</code> reports the median, the 90th percentile and the latest (<code>finality</code>).</p>
+    <p>Sending on BTCVM costs 2 sat/vB in the wallets (the relay minimum is 1 sat/vB), a few hundred satoshis for a typical payment, and is final within seconds. A Bitcoin block comes about every 10 minutes, at random, and a slow one can take much longer.</p>
+    <p>The site measures that speed live. For every payment sent through this site, the bridge times how long it takes from receiving the payment to accepting the block that holds it. On BTCVM, an accepted block is final. It checks four times a second, so a figure can be up to a quarter of a second slow, never fast. The home page shows the median of the last 50 payments, and <code>/api/status</code> reports the median, the 90th percentile and the latest (<code>finality</code>).</p>
 
     <h3 id="where-fees-go">Where fees go</h3>
-    <p><strong>In short: fees on DogecoinVM go to its validators, and the withdrawal fee goes to Dogecoin's miners. The bridge keeps nothing.</strong></p>
+    <p><strong>In short: fees on BTCVM go to its validators, and the withdrawal fee goes to Bitcoin's miners. The bridge keeps nothing.</strong></p>
     <div class="table-wrap">
     <table class="fees-table">
       <thead><tr><th>Fee</th><th>When you pay it</th><th>How much</th><th>Who gets it</th></tr></thead>
       <tbody>
-        <tr><td>Network fee</td><td>Any payment on DogecoinVM</td><td>0.01 DOGE per kB, usually about 0.002 DOGE</td><td>The validator that built the block</td></tr>
-        <tr><td>Bridge fee</td><td>Each deposit</td><td><span data-info="vmFee" data-doge>…</span> DOGE</td><td>The validator that built the block (it's the fee of the transaction that credits you)</td></tr>
-        <tr><td>Withdrawal fee</td><td>Each withdrawal</td><td><span data-info="dogeFee" data-doge>…</span> DOGE</td><td>Dogecoin's miners (it pays for the payout on Dogecoin)</td></tr>
+        <tr><td>Network fee</td><td>Any payment on BTCVM</td><td>2 sat/vB, usually a few hundred satoshis</td><td>The validator that built the block</td></tr>
+        <tr><td>Bridge fee</td><td>Each deposit</td><td><span data-info="vmFee" data-btc>…</span> BTC</td><td>The validator that built the block (it's the fee of the transaction that credits you)</td></tr>
+        <tr><td>Withdrawal fee</td><td>Each withdrawal</td><td>about <span data-info="payoutFee" data-btc>…</span> BTC today</td><td>Bitcoin's miners (it pays for the payout on Bitcoin)</td></tr>
       </tbody>
     </table>
     </div>
-    <p><strong>With several validators,</strong> each sets its own fee address. Metal takes turns choosing which validator proposes each block, weighted by stake, and that validator collects the fees in it. So fees spread across validators roughly in proportion to their stake. DogecoinVM only makes a block when there are payments, so a validator's share also depends on traffic. Today there is one validator.</p>
-    <p><strong>No fee is destroyed or leaves the peg.</strong> Fees paid on DogecoinVM stay there as ordinary DOGE, backed by DOGE locked on Dogecoin like any other. The bridge's signers aren't paid from fees yet.</p>
+    <p><strong>With several validators,</strong> each sets its own fee address. Metal takes turns choosing which validator proposes each block, weighted by stake, and that validator collects the fees in it. So fees spread across validators roughly in proportion to their stake. BTCVM only makes a block when there are payments, so a validator's share also depends on traffic. The beta starts with one validator.</p>
+    <p><strong>No fee is destroyed or leaves the peg.</strong> Fees paid on BTCVM stay there as ordinary BTC, backed by BTC locked on Bitcoin like any other. The bridge's signers aren't paid from fees yet.</p>
 
     <h2 id="trust">Trust and limits</h2>
-    <div class="callout"><p><strong>Beta, with real DOGE.</strong> The bridge is new and hasn't had an external audit. Keep amounts small.</p></div>
+    <div class="callout"><p><strong>Beta, with real BTC.</strong> The bridge is new and hasn't had an external audit. Keep amounts small.</p></div>
     <ul>
-      <li><strong>Custody.</strong> The DOGE locked on Dogecoin and the reserve on DogecoinVM are held by a 2-of-3 multisig of peg signers. Any two of them could move it. Signer keys aren't yet held by independent operators; bringing them in is the next phase of the <a href="/roadmap">roadmap</a>, and the software and setup ceremony for it are built.</li>
+      <li><strong>Custody.</strong> The BTC locked on Bitcoin and the reserve on BTCVM are held by a 2-of-3 multisig of peg signers. Any two of them could move it. Signer keys aren't yet held by independent operators; bringing them in is the next phase of the <a href="/roadmap">roadmap</a>, and the software and setup ceremony for it are built.</li>
       <li><strong>What the signers check.</strong> In the separate-signer design, each signer checks every transaction against its own view of both chains, and signs only what is owed, exactly as it would build it.</li>
-      <li><strong>Caps.</strong> During the beta, deposits and the total on DogecoinVM are capped, so the amount at risk is known in advance.</li>
+      <li><strong>Caps.</strong> During the beta, deposits and the total on BTCVM are capped, so the amount at risk is known in advance.</li>
       <li><strong>Pause.</strong> The bridge can be paused in an emergency: nothing is signed or paid, and the site shows why. Deposits and withdrawals made while paused are processed after it resumes.</li>
-      <li><strong>Refunds.</strong> A deposit that can't be credited, for example one over the beta limit, is held on Dogecoin and can be refunded.</li>
-      <li><strong>Backups.</strong> The bridge's keys and settings are backed up daily, encrypted to a key held off the server, and a backup has been restored and checked against the live keys.</li>
+      <li><strong>Refunds.</strong> A deposit that can't be credited, for example one over the beta limit, is held on Bitcoin and can be refunded.</li>
+      <li><strong>Backups.</strong> The bridge's keys and settings are backed up daily, encrypted to a key held off the server, and a backup can be restored and checked against the live keys.</li>
     </ul>
 
     <h2 id="wallets">Wallets</h2>
-    <p><strong>In the browser.</strong> The <a href="/">bridge page</a> is a wallet: your key is made in the browser and never leaves it. Protect it with a passkey, for example one saved in 1Password, and opening the wallet takes the passkey. Passkey protection needs a passkey provider that supports the PRF extension; older security keys don't. Every coin a payment spends is checked against the raw transaction that created it, so the server can't inflate a fee. Before anything is signed, the wallet shows what the payment does (who's paid, the change back to you, a withdrawal's Dogecoin address, and the fee), read from the transaction itself, and signs only once you confirm.</p>
-    <p><strong>On a Mac.</strong> The <a href="/download">Mac app</a> keeps the key encrypted to the Mac's Secure Enclave, shows every payment for review before Touch ID signs it, and updates itself.</p>
-    <p>Both wallets are open source: the web wallet is in the <a href="https://github.com/MetalBlockchain/btcvm">DogecoinVM repository</a> (<code>cmd/dogevm/web</code>), and the Mac app in <a href="https://github.com/paulgnz/dogecoin-vm-wallet">its own repository</a>, where each release carries the DMG it was built into.</p>
-    <p>Whichever you use, back up your key. It's your wallet on both networks, and without it the DOGE can't be recovered.</p>
+    <p><strong>In the browser.</strong> The <a href="/">bridge page</a> is a wallet: your key is made in the browser and never leaves it. Protect it with a passkey, for example one saved in 1Password, and opening the wallet takes the passkey. Passkey protection needs a passkey provider that supports the PRF extension; older security keys don't. Every coin a payment spends is checked against the raw transaction that created it, so the server can't inflate a fee. Before anything is signed, the wallet shows what the payment does (who's paid, the change back to you, a withdrawal's Bitcoin address, and the fee), read from the transaction itself, and signs only once you confirm.</p>
+    <p><strong>On a Mac.</strong> A <a href="/download">Mac app</a> is in development: the key encrypted to the Mac's Secure Enclave, Touch ID for every payment, and import from a Bitcoin Core <code>wallet.dat</code>.</p>
+    <p>The web wallet is open source, in the <a href="https://github.com/MetalBlockchain/btcvm">BTCVM repository</a> (<code>cmd/btcvm/web</code>).</p>
+    <p>Whichever you use, back up your key. It's your wallet on both networks, and without it the BTC can't be recovered.</p>
 
     <h2 id="developers">For developers</h2>
     <p>The bridge serves a JSON API at this site, used by both wallets:</p>
     <pre>GET  /api/info                 network, fees, limits and signers
 GET  /api/status               both chains' heights, sync, the peg audit
-GET  /api/reserves             every locked output on Dogecoin
+GET  /api/reserves             every locked output on Bitcoin
 GET  /api/activity             recent deposits and withdrawals
-GET  /api/address/{address}    DogecoinVM balance, outputs and history
-GET  /api/tx/{txid}            a DogecoinVM transaction, described
-GET  /api/block/{height|hash}  a DogecoinVM block
-GET  /api/deposits/{address}   deposits for a DogecoinVM address
+GET  /api/address/{address}    BTCVM balance, outputs and history
+GET  /api/tx/{txid}            a BTCVM transaction, described
+GET  /api/block/{height|hash}  a BTCVM block
+GET  /api/deposits/{address}   deposits for a BTCVM address
 GET  /api/pegout/{txid}        a withdrawal's status
 POST /api/deposit-address      {"address": …}: your deposit address
-POST /api/tx                   {"hex": …}: broadcast on DogecoinVM
+POST /api/tx                   {"hex": …}: broadcast on BTCVM
 GET  /api/health               checks, for uptime monitors</pre>
     <p>The source, including the chain, the bridge, both wallets' code and the deployment scripts, is on <a href="https://github.com/MetalBlockchain/btcvm">GitHub</a>.</p>
 

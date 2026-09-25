@@ -40,4 +40,4 @@ fi
 
 # Build btcvm, which is run as a subprocess
 echo "Building btcvm in $binary_directory"
-go build -o "$binary_directory" ./cmd/dogevm-plugin
+go build -o "$binary_directory" ./cmd/btcvm-plugin

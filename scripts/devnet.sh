@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Runs a single-node local Metal network with a DogecoinVM chain.
+# Runs a single-node local Metal network with a BTCVM chain.
 #
 #   METALGO=/path/to/metalgo scripts/devnet.sh start   # build, start, create the chain
 #   scripts/devnet.sh stop
@@ -10,16 +10,16 @@
 # limited RPC user that can read and broadcast but not administer the node.
 #
 # The node runs with sybil protection disabled, so it alone validates every
-# chain. State lives in DEVNET_DIR (default ~/.dogevm-devnet); delete it to
+# chain. State lives in DEVNET_DIR (default ~/.btcvm-devnet); delete it to
 # start over. Requires metalgo v1.13.5 (rpcchainvm protocol 43).
 set -euo pipefail
 
 ROOT=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
-DIR=${DEVNET_DIR:-$HOME/.dogevm-devnet}
-DOGE_NETWORK=${DOGECOIN_NETWORK:-regtest}
+DIR=${DEVNET_DIR:-$HOME/.btcvm-devnet}
+BTC_NETWORK=${BITCOIN_NETWORK:-regtest}
 HTTP_PORT=${HTTP_PORT:-9650}
 URI="http://127.0.0.1:$HTTP_PORT"
-RPC_USER=dogevm
+RPC_USER=btcvm
 RPC_PASS_FILE="$DIR/rpc-password"
 
 log() { echo "devnet: $*" >&2; }
@@ -70,9 +70,9 @@ stop_node() {
 wait_chain() {
   for _ in $(seq 120); do
     if curl -sf -X POST -H 'content-type:application/json' \
-      -d '{"jsonrpc":"2.0","id":1,"method":"info.isBootstrapped","params":{"chain":"dogecoinvm"}}' \
+      -d '{"jsonrpc":"2.0","id":1,"method":"info.isBootstrapped","params":{"chain":"btcvm"}}' \
       "$URI/ext/info" | grep -q '"isBootstrapped":true'; then
-      log "DogecoinVM chain is up"
+      log "BTCVM chain is up"
       return
     fi
     sleep 1
@@ -86,19 +86,19 @@ cmd_start() {
 
   log "building plugin and tools"
   VMID=$(cd "$ROOT" && go run ./scripts/vm-id-generator.go)
-  (cd "$ROOT" && go build -o "$DIR/plugins/$VMID" ./cmd/dogevm-plugin \
-    && go build -o "$DIR/bin/dogevm" ./cmd/dogevm \
-    && go build -o "$DIR/bin/dogevm-devnet" ./cmd/dogevm-devnet)
+  (cd "$ROOT" && go build -o "$DIR/plugins/$VMID" ./cmd/btcvm-plugin \
+    && go build -o "$DIR/bin/btcvm" ./cmd/btcvm \
+    && go build -o "$DIR/bin/btcvm-devnet" ./cmd/btcvm-devnet)
 
   if [[ ! -f "$DIR/signers.json" ]]; then
-    "$DIR/bin/dogevm" signers -required 2 -total 3 -out "$DIR/signers.json" \
-      -doge-network "$DOGE_NETWORK" >"$DIR/signers.out"
+    "$DIR/bin/btcvm" signers -required 2 -total 3 -out "$DIR/signers.json" \
+      -btc-network "$BTC_NETWORK" >"$DIR/signers.out"
     log "created peg signer set $DIR/signers.json"
   fi
-  RESERVE=$(jq -r .dogecoinvmReserve "$DIR/signers.out")
+  RESERVE=$(jq -r .btcvmReserve "$DIR/signers.out")
 
   [[ -f "$RPC_PASS_FILE" ]] || openssl rand -hex 16 >"$RPC_PASS_FILE"
-  [[ -f "$DIR/builder.json" ]] || "$DIR/bin/dogevm" keygen -doge-network "$DOGE_NETWORK" >"$DIR/builder.json"
+  [[ -f "$DIR/builder.json" ]] || "$DIR/bin/btcvm" keygen -btc-network "$BTC_NETWORK" >"$DIR/builder.json"
   [[ -f "$DIR/aliases.json" ]] || echo '{}' >"$DIR/aliases.json"
 
   stop_node
@@ -108,21 +108,21 @@ cmd_start() {
     jq -n --arg reserve "$RESERVE" \
       '{config: {testNet: true, pegReserveAddress: $reserve, pegReserveBlocks: 1}}' >"$DIR/genesis.json"
     log "creating subnet and chain"
-    "$DIR/bin/dogevm-devnet" -uri "$URI" -genesis "$DIR/genesis.json" >"$DIR/chain.json"
+    "$DIR/bin/btcvm-devnet" -uri "$URI" -genesis "$DIR/genesis.json" >"$DIR/chain.json"
     CHAIN_ID=$(jq -r .chainID "$DIR/chain.json")
 
     # Node-local chain config: private RPC credentials and the indexes the
     # wallet and bridge need.
     mkdir -p "$DIR/chain-configs/$CHAIN_ID"
     jq -n --arg user "$RPC_USER" --arg pass "$(cat "$RPC_PASS_FILE")" \
-      --arg builder "$(jq -r .dogecoinvmAddress "$DIR/builder.json")" \
+      --arg builder "$(jq -r .btcvmAddress "$DIR/builder.json")" \
       --arg data "$DIR/chaindata" --arg logs "$DIR/chainlogs" \
         --arg luser "${PUBLIC_RPC_USER:-}" --arg lpass "${PUBLIC_RPC_PASS:-}" \
       '{rpcUser: $user, rpcPass: $pass, txIndex: true, addrIndex: true,
         miningAddrs: [$builder], dataDir: $data, logDir: $logs}
        + (if $luser != "" then {rpcLimitUser: $luser, rpcLimitPass: $lpass} else {} end)' \
       >"$DIR/chain-configs/$CHAIN_ID/config.json"
-    jq -n --arg id "$CHAIN_ID" '{($id): ["dogecoinvm"]}' >"$DIR/aliases.json"
+    jq -n --arg id "$CHAIN_ID" '{($id): ["btcvm"]}' >"$DIR/aliases.json"
 
     # Tracking the new subnet and the alias need a restart.
     stop_node
@@ -134,11 +134,11 @@ cmd_start() {
 
 cmd_env() {
   cat <<EOF
-export DOGEVM_RPC=$URI/ext/bc/$(jq -r .chainID "$DIR/chain.json")/rpc
-export DOGEVM_RPC_USER=$RPC_USER
-export DOGEVM_RPC_PASS=$(cat "$RPC_PASS_FILE")
-export DOGEVM_NETWORK=testnet
-export DOGECOIN_NETWORK=$DOGE_NETWORK
+export BTCVM_RPC=$URI/ext/bc/$(jq -r .chainID "$DIR/chain.json")/rpc
+export BTCVM_RPC_USER=$RPC_USER
+export BTCVM_RPC_PASS=$(cat "$RPC_PASS_FILE")
+export BTCVM_NETWORK=testnet
+export BITCOIN_NETWORK=$BTC_NETWORK
 # signer set: $DIR/signers.json   chain: $(jq -c . "$DIR/chain.json" 2>/dev/null)
 EOF
 }

@@ -1,66 +1,79 @@
 # First round trip, then separate signers
 
-What to do once the bridge's Dogecoin node has caught up: prove a deposit
-and a withdrawal end to end on mainnet, then move the bridge onto separate
-signer services. Commands run on the server, as root.
+What to do once the bridge's Bitcoin node has caught up: prove a deposit
+and a withdrawal end to end on mainnet with a small amount, then move the
+bridge onto separate signer services. BTCVM hasn't done this yet; this is
+the plan for it. Commands run on the server, as root.
+
+The paths and service names below follow the mainnet host set up by
+`deploy/mainnet.sh`: state in `/var/lib/metal-main`, Bitcoin Core's data in
+`/var/lib/bitcoin-main`, services run as the `btcvm` user.
 
 ## 0. The node has caught up
 
-The monitor sends "all checks OK" to Telegram when the `dogecoin` check
+Bitcoin Core needs `-txindex`, about 700 GB of disk, and several days to
+sync. The monitor sends "all checks OK" to Telegram when the `bitcoin` check
 passes. To check by hand:
 
 ```sh
-curl -s https://metaldoge.com/api/health | jq '.status, (.checks[] | select(.ok | not))'
+curl -s https://metalbtc.com/api/health | jq '.status, (.checks[] | select(.ok | not))'
 ```
 
-`status` should be `ok`, with nothing failing. The Dogecoin index then
-catches up too: the web wallet's Dogecoin balance appears.
+`status` should be `ok`, with nothing failing. The Bitcoin index then
+catches up too: the web wallet's Bitcoin balance appears.
 
-Then give memory back: the sync ran with a 6 GB cache (`dbcache=6000` in
-`/var/lib/dogecoin-main/dogecoin.conf`), which a synced node doesn't need on
-a 15 GB server shared with metalgo and the bridge. Set `dbcache=1000` and
-restart Dogecoin Core at a quiet moment (`systemctl restart dogecoind-main`;
-it takes a minute or two to come back).
+If the sync ran with a large `dbcache` in
+`/var/lib/bitcoin-main/bitcoin.conf`, give the memory back: a synced node
+doesn't need it on a server shared with metalgo and the bridge. Set
+`dbcache` back down and restart Bitcoin Core at a quiet moment
+(`systemctl restart bitcoind-main`; it takes a minute or two to come back).
 
-## 1. The first deposit is credited
+## 1. A small deposit
 
-The 1 DOGE deposit (Dogecoin transaction `74e053f6…`) is credited 20
-confirmations after the node sees it, less the 0.01 DOGE bridge fee.
+From the web wallet (Deposit tab), move a small amount, above the minimum
+deposit shown there, from your Bitcoin balance, or send it to your deposit
+address from any Bitcoin wallet. It is credited once it has the
+confirmations the Deposit tab shows for its size (6 by default, about an
+hour; smaller deposits may need fewer), less the bridge fee.
 
-- In the wallet: the DogecoinVM balance shows 0.99 DOGE, and the Deposit tab
-  lists the deposit as credited.
+- In the wallet: the BTCVM balance shows the amount less the bridge fee, and
+  the Deposit tab lists the deposit as credited.
 - In the explorer (`/explorer`): the deposit appears under Bridge activity
   with a transaction on each chain, and Proof of reserves lists the locked
   output.
-- `curl -s https://metaldoge.com/api/status | jq .audit`: `locked` covers
+- `curl -s https://metalbtc.com/api/status | jq .audit`: `locked` covers
   `circulating` plus anything pending, and the monitor's `peg` check passes.
 
-If it isn't credited within a few minutes of 20 confirmations, see "A deposit
-that hasn't arrived" in [RUNBOOK.md](RUNBOOK.md).
+If it isn't credited within a few minutes of reaching its confirmations, see
+"A deposit that hasn't arrived" in [RUNBOOK.md](RUNBOOK.md).
 
-## 2. A withdrawal back to Dogecoin
+## 2. A withdrawal back to Bitcoin
 
-From the Mac app (or the web wallet's Withdraw tab), withdraw at least the
-minimum to your own Dogecoin address. Check the review screen: the amount to
-the bridge, and the Dogecoin address it pays.
+From the web wallet's Withdraw tab, withdraw at least the minimum to your
+own Bitcoin address. Check the review screen: the amount to the bridge, and
+the Bitcoin address it pays.
 
-- The withdrawal is final on DogecoinVM in about two seconds; the bridge pays
-  it on its next pass (every 30 seconds), less the 0.1 DOGE Dogecoin fee.
-- The explorer shows the withdrawal with both transactions; the Dogecoin one
+- The withdrawal is final on BTCVM in seconds; the bridge pays it on its
+  next pass, less the Bitcoin network fee at the current fee rate. The
+  payout confirms in the next Bitcoin block it makes, usually about 10
+  minutes. If it is still unconfirmed after 30 minutes and fees have risen,
+  the bridge replaces it with one paying the current rate.
+- The explorer shows the withdrawal with both transactions; the Bitcoin one
   links to a public explorer.
 - `/api/status` audit still balances, and `/api/health` stays `ok`.
 
 ## 3. Record it
 
-Note both round trips' transaction IDs (deposit, credit, withdrawal, payout),
-then update the roadmap: "Where it stands", and Phase 1's done items, with
-links. That's the end-to-end proof.
+Note the round trip's transaction IDs (deposit, credit, withdrawal, payout),
+then update the roadmap: "Where it stands", the "Next: the first round
+trip" section, and the "Prove the round trip" phase. That's the end-to-end
+proof.
 
 ## 4. Separate signers
 
-This moves the bridge onto the Phase 2 design on this server: three signer
-services, one key each, each checking every transaction against the nodes
-before signing, and a coordinator that holds no keys. The peg address
+This moves the bridge onto the separate-signer design on this server: three
+signer services, one key each, each checking every transaction against the
+nodes before signing, and a coordinator that holds no keys. The peg address
 doesn't change. It's a rehearsal of the protocol with live funds; the
 security gain comes when signers move to other operators' machines
 ([SIGNERS.md](SIGNERS.md)).
@@ -71,7 +84,7 @@ Do it at a quiet moment: nothing pending in either direction
 ### Stage
 
 ```sh
-cd /opt/dogevm/src && sudo -u dogevm git pull -q
+cd /opt/btcvm/src && sudo -u btcvm git pull -q
 deploy/stage-signers.sh
 ```
 
@@ -80,25 +93,23 @@ It copies each key to its own signer directory under
 checks the keys and their order match the live set's, and writes a service
 file per signer. It starts nothing. `rm -r` the directory undoes it.
 
-Staged again on 25 September 2026 with the confirmation tiers in the policy
-(fingerprint `7c71-1377-b369-6632-ecd5`, peg address unchanged). Before starting the signers, refresh each one's copy
-of the deposit registry, since addresses registered after staging aren't in
-it:
+Before starting the signers, refresh each one's copy of the deposit
+registry, since addresses registered after staging aren't in it:
 
 ```sh
 S=/var/lib/metal-main/secrets/separate-signers
-for n in 1 2 3; do sudo -u dogevm cp /var/lib/metal-main/secrets/deposits.json $S/signer$n/deposits.json; done
+for n in 1 2 3; do sudo -u btcvm cp /var/lib/metal-main/secrets/deposits.json $S/signer$n/deposits.json; done
 ```
 
 ### Start the signers
 
 ```sh
 S=/var/lib/metal-main/secrets/separate-signers
-for n in 1 2 3; do cp $S/signer$n/dogevm-signer-$n.service /etc/systemd/system/; done
+for n in 1 2 3; do cp $S/signer$n/btcvm-signer-$n.service /etc/systemd/system/; done
 systemctl daemon-reload
-systemctl enable --now dogevm-signer-1 dogevm-signer-2 dogevm-signer-3
+systemctl enable --now btcvm-signer-1 btcvm-signer-2 btcvm-signer-3
 for n in 1 2 3; do
-  sudo -u dogevm bash -c "set -a; . $S/signer$n/signer.env; exec /opt/dogevm/bin/dogevm signer-setup check -dir $S/signer$n"
+  sudo -u btcvm bash -c "set -a; . $S/signer$n/signer.env; exec /opt/btcvm/bin/btcvm signer-setup check -dir $S/signer$n"
 done
 ```
 
@@ -107,7 +118,7 @@ request.
 
 ### Switch the bridge
 
-In `/etc/systemd/system/dogevm-bridge-main.service`, change `-signers` in
+In `/etc/systemd/system/btcvm-bridge-main.service`, change `-signers` in
 `ExecStart` and add the coordinator flags, keeping the policy flags as they
 are:
 
@@ -121,8 +132,8 @@ Point the web and monitor services' `-signers` at the same public set. Then:
 
 ```sh
 systemctl daemon-reload
-systemctl restart dogevm-bridge-main dogevm-web-main dogevm-monitor-main
-journalctl -u dogevm-bridge-main -u dogevm-signer-1 -u dogevm-signer-2 -u dogevm-signer-3 -f
+systemctl restart btcvm-bridge-main btcvm-web-main btcvm-monitor-main
+journalctl -u btcvm-bridge-main -u btcvm-signer-1 -u btcvm-signer-2 -u btcvm-signer-3 -f
 ```
 
 ### Prove it
@@ -133,7 +144,7 @@ what it signed. Health stays `ok`.
 
 ### Retire the combined key file
 
-Once a backup has run with the signer directories in it (`dogevm-backup run`,
+Once a backup has run with the signer directories in it (`btcvm-backup run`,
 then `scripts/restore-check.sh` on your Mac), move
 `/var/lib/metal-main/secrets/signers.json` out of service and delete it,
 including from old backups when they age out. From then on each key exists
@@ -146,5 +157,5 @@ drop the coordinator flags, and restart. The peg address never changed, so
 nothing on either chain needs to move.
 
 ```sh
-systemctl disable --now dogevm-signer-1 dogevm-signer-2 dogevm-signer-3
+systemctl disable --now btcvm-signer-1 btcvm-signer-2 btcvm-signer-3
 ```

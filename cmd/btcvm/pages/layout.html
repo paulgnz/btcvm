@@ -7,7 +7,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>{{.Title}}</title>
   <meta name="description" content="{{.Description}}">
-  <link rel="icon" href="dogecoin.svg" type="image/svg+xml">
+  <link rel="icon" href="bitcoin.svg" type="image/svg+xml">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   {{block "fonts" .}}<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=Schibsted+Grotesk:wght@400;500;700;800&display=swap" rel="stylesheet">{{end}}
@@ -20,7 +20,7 @@
 <body>
   <a class="skip-link" href="#content">Skip to content</a>
   <header class="site-header">
-    <a class="site-brand" href="/"><img src="dogecoin.svg" alt="" width="32" height="32">DogecoinVM</a>
+    <a class="site-brand" href="/"><img src="bitcoin.svg" alt="" width="32" height="32">BTCVM</a>
     <nav class="site-nav" aria-label="Site">
       {{- range .Nav}}{{if not .CTA}}
       <a href="{{.Path}}"{{if eq .Path $.Path}} aria-current="page"{{end}}>{{.Label}}</a>

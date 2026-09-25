@@ -1,90 +1,69 @@
 {{define "head"}}
   <link rel="stylesheet" href="roadmap.css">
 {{end}}
-{{define "fonts"}}<link href="https://fonts.googleapis.com/css2?family=Comic+Neue:wght@700&family=IBM+Plex+Mono:wght@400;500&family=Schibsted+Grotesk:wght@400;500;700;800&display=swap" rel="stylesheet">{{end}}
 {{define "main"}}
 <main class="page">
   <div class="hero">
   <div>
-  <h1>DogecoinVM technical roadmap</h1>
-  <p class="lede">DogecoinVM is a Dogecoin-compatible chain running as a Layer 1 on Metal Blockchain, joined to Dogecoin by a one-for-one DOGE bridge. This page covers what is running today, how it works, what it doesn't do yet, and the order in which we'll close those gaps.</p>
+  <h1>BTCVM technical roadmap</h1>
+  <p class="lede">BTCVM is a Bitcoin-compatible chain running as a Layer 1 on Metal Blockchain, joined to Bitcoin by a one-for-one BTC bridge. This page covers what is built today, how it works, what it doesn't do yet, and the order in which we'll close those gaps.</p>
   </div>
   <div class="hero-art" aria-hidden="true">
-    <img class="doge-art" src="doge.png" alt="">
-
-    <span class="wow wow-1">such peg</span>
-    <span class="wow wow-2">very backed</span>
-    <span class="wow wow-3">much verify</span>
-    <span class="wow wow-4">wow</span>
+    <img class="btc-art" src="btc.png" alt="">
   </div>
   </div>
-  <p class="meta">Status as of 23 September 2026 · Source: <a href="https://github.com/MetalBlockchain/btcvm">github.com/MetalBlockchain/btcvm</a> · Live: <a href="https://metaldoge.com">metaldoge.com</a></p>
+  <p class="meta">Status as of 25 September 2026 · Source: <a href="https://github.com/MetalBlockchain/btcvm">github.com/MetalBlockchain/btcvm</a> · Site: <a href="https://metalbtc.com">metalbtc.com</a></p>
 
   <div class="headline">
-    <p><strong>Where it stands.</strong> DogecoinVM is live on Metal Blockchain mainnet with real DOGE, limited by beta caps, and the bridge has completed its first round trip: DOGE moved from Dogecoin to DogecoinVM and back, with every step on chain. The software for independent signers, and the ceremony that brings them in, are built and staged with the live keys. Moving the bridge onto them is next.</p>
+    <p><strong>Where it stands.</strong> The chain, the bridge and the web wallet are built for Bitcoin: Bitcoin's rules with SegWit and Taproot from the first block, SegWit deposit addresses, payouts at Bitcoin's live fee rate that can be replaced if they're slow, all tested against btcd's script engine. The software for independent signers, and the ceremony that brings them in, are built too. Nothing has crossed the bridge on mainnet yet. Next: host the bridge's Bitcoin node and, once it has synced, make a first small mainnet round trip.</p>
   </div>
 
-  <h2 id="the-first-round-trip">The first round trip</h2>
-  <p>23 September 2026. Dogecoin transactions open on a public Dogecoin explorer, DogecoinVM ones in this site's explorer.</p>
-  <div class="table-wrap">
-  <table>
-    <thead><tr><th>Step</th><th>Chain</th><th>Transaction</th><th>Amount</th></tr></thead>
-    <tbody>
-      <tr><td>Deposit to a personal deposit address</td><td>Dogecoin</td><td><a href="https://blockchair.com/dogecoin/transaction/74e053f6b3c1bd3a9947dddbc42cf54dd9761f7d7cdc6a1ea30947b119ea11b9"><code>74e053f6…ea11b9</code></a></td><td>1 DOGE</td></tr>
-      <tr><td>Credit, after 20 confirmations and the 0.01 DOGE bridge fee</td><td>DogecoinVM</td><td><a href="/explorer#/tx/39a6c47ee4ee60c68f19b963c40911730663498c78aff055a92576d1317d8475"><code>39a6c47e…7d8475</code></a></td><td>0.99 DOGE</td></tr>
-      <tr><td>Withdrawal to the bridge, naming a Dogecoin address</td><td>DogecoinVM</td><td><a href="/explorer#/tx/4a447affd54af5dca7feb45195e3e479bd7a265fb078b31d11f4d218d66c3852"><code>4a447aff…6c3852</code></a></td><td>5 DOGE</td></tr>
-      <tr><td>Payout, after the 0.1 DOGE Dogecoin fee, about a minute later</td><td>Dogecoin</td><td><a href="https://blockchair.com/dogecoin/transaction/8be21486441207524403742b3c0c9023b5764fb4e1f12ef0e9f493d19aec9737"><code>8be21486…ec9737</code></a></td><td>4.9 DOGE</td></tr>
-    </tbody>
-  </table>
-  </div>
-  <p>The wallet's one-click move, from its Dogecoin balance to its deposit address after review, worked the same evening (<a href="https://blockchair.com/dogecoin/transaction/0c7de3cee105e2e3a045122080f82469a418cc481edf447b52e5e5d4317b9f68"><code>0c7de3ce…7b9f68</code></a>). Proof of reserves matched throughout: DOGE locked on Dogecoin equalled DOGE circulating on DogecoinVM plus deposits waiting to be credited.</p>
+  <h2 id="the-first-round-trip">Next: the first round trip</h2>
+  <p>Once the bridge's Bitcoin node has synced, a small amount goes each way on mainnet: a deposit from Bitcoin, credited on BTCVM, then a withdrawal paid back to Bitcoin. Each step will have a transaction on each chain, visible in the explorer, and proof of reserves should match throughout: BTC locked on Bitcoin equal to BTC circulating on BTCVM plus deposits waiting to be credited.</p>
 
-  <h2>What is running</h2>
+  <h2>What is built</h2>
   <div class="table-wrap">
   <table>
     <thead><tr><th>Component</th><th>What it does</th><th>State</th></tr></thead>
     <tbody>
-      <tr><td>DogecoinVM L1</td><td>Dogecoin's transaction and script rules (legacy, pre-SegWit) and Dogecoin 1.14 fee and dust policy, with Snowman consensus: a transaction is final once it is in a block, in seconds.</td><td class="state"><span class="chip live">Live</span></td></tr>
-      <tr><td>Peg reserve</td><td>DOGE is created only in the chain's reserve blocks, which consensus enforces. That supply is locked to the peg signers and released only against DOGE locked on Dogecoin.</td><td class="state"><span class="chip live">Live</span></td></tr>
-      <tr><td>Bridge</td><td>Watches both chains. It credits deposits after 1 to 20 Dogecoin confirmations, depending on the amount, and pays out withdrawals once they are final on DogecoinVM. It stops moving funds if the solvency check fails.</td><td class="state"><span class="chip live">Live</span></td></tr>
-      <tr><td>Web wallet</td><td>One key, one address on both networks: Dogecoin and DogecoinVM balances side by side, and a one-click move between them. Keys stay in the browser, optionally encrypted to a passkey, and every payment is shown for review, read from the transaction itself, before it's signed there. The page checks the deposit address and every coin it spends itself, rather than trusting the server. It installs as an app on Mac, iPhone and Android.</td><td class="state"><span class="chip live">Live</span></td></tr>
-      <tr><td>Explorer</td><td>Shows bridge activity with the transaction on each chain, proof of reserves output by output, and DogecoinVM blocks, transactions and addresses.</td><td class="state"><span class="chip live">Live</span></td></tr>
-      <tr><td>Monitoring</td><td>Checks the peg, overdue transfers, both nodes and the validator's fee balance every minute, and sends Telegram alerts.</td><td class="state"><span class="chip live">Live</span></td></tr>
-      <tr><td>Separate signers</td><td>A signer service for each key holder, and <code>dogevm signer-setup</code>, the ceremony that brings new signers in. Staged on the server with the live keys, without changing the peg address; the bridge moves onto them next, and independent operators follow.</td><td class="state"><span class="chip wait">Built, staged</span></td></tr>
-      <tr><td>macOS wallet</td><td>A native Mac app for both networks: review every payment before it's signed, Touch ID for each signature, the key kept encrypted to the Mac's Secure Enclave, and signed automatic updates. Signed and notarized by Apple for download outside the App Store, and <a href="https://github.com/paulgnz/dogecoin-vm-wallet">open source</a>.</td><td class="state"><span class="chip live">Live</span></td></tr>
-      <tr><td>Dogecoin node</td><td>The bridge's own Dogecoin Core node, with a full transaction index, which the bridge and the wallet's Dogecoin balances read.</td><td class="state"><span class="chip live">Live</span></td></tr>
+      <tr><td>BTCVM L1</td><td>Bitcoin's transaction, script and consensus rules, with SegWit and Taproot active from the first block, and Bitcoin Core's relay and dust policy, with Snowman consensus: a transaction is final once it is in a block, in seconds. No mining reward.</td><td class="state"><span class="chip live">Built</span></td></tr>
+      <tr><td>Peg reserve</td><td>BTC is created only in the chain's reserve blocks, which consensus enforces. That supply is locked to the peg signers and released only against BTC locked on Bitcoin.</td><td class="state"><span class="chip live">Built</span></td></tr>
+      <tr><td>Bridge</td><td>Watches both chains. It credits deposits after enough Bitcoin confirmations for the amount (6 by default), and pays out withdrawals once they are final on BTCVM, at Bitcoin's current fee rate. A payout still unconfirmed after 30 minutes is replaced with one paying the current rate, spending the same coins. It stops moving funds if the solvency check fails. Tested against btcd's script engine.</td><td class="state"><span class="chip live">Built</span></td></tr>
+      <tr><td>Web wallet</td><td>One key, one native SegWit (bc1q…) address on both networks: Bitcoin and BTCVM balances side by side, and a one-click move between them. Keys stay in the browser, optionally encrypted to a passkey, and every payment is shown for review, read from the transaction itself, before it's signed there. The page checks the deposit address and every coin it spends itself, rather than trusting the server. It installs as an app on Mac, iPhone and Android.</td><td class="state"><span class="chip live">Built</span></td></tr>
+      <tr><td>Explorer</td><td>Shows bridge activity with the transaction on each chain, proof of reserves output by output, and BTCVM blocks, transactions and addresses.</td><td class="state"><span class="chip live">Built</span></td></tr>
+      <tr><td>Monitoring</td><td>Checks the peg, overdue transfers, both nodes and the validator's fee balance every minute, and sends Telegram alerts.</td><td class="state"><span class="chip live">Built</span></td></tr>
+      <tr><td>Separate signers</td><td>A signer service for each key holder, and <code>btcvm signer-setup</code>, the ceremony that brings new signers in. The tests run the ceremony, then a deposit and a withdrawal signed by separate signers. The bridge moves onto them after the first round trip, and independent operators follow.</td><td class="state"><span class="chip wait">Built</span></td></tr>
+      <tr><td>macOS wallet</td><td>A native Mac app for both networks: review every payment before it's signed, Touch ID for each signature, the key kept encrypted to the Mac's Secure Enclave, signed automatic updates, and importing keys from a Bitcoin Core <code>wallet.dat</code>. <a href="https://github.com/paulgnz/bitcoin-vm-wallet">Open source</a>.</td><td class="state"><span class="chip plan">Planned</span></td></tr>
+      <tr><td>Bitcoin node</td><td>The bridge's own Bitcoin Core node, with a full transaction index (about 700 GB), which the bridge and the wallet's Bitcoin balances read.</td><td class="state"><span class="chip wait">Next</span></td></tr>
     </tbody>
   </table>
   </div>
 
-  <p>Anyone can check these IDs on Metal Blockchain:</p>
+  <p>BTCVM's VM ID on Metal Blockchain, from the name <code>btcvm</code>:</p>
   <dl class="ids">
-    <div><dt>Subnet</dt><dd>2t2zEB1T3mNUE2WoheMFMjfhAvQJawtgiwnKPJz2NsFk7FDgyN</dd></div>
-    <div><dt>Chain</dt><dd>2hFCfzdMmfXBxYgvvdL7BYiJAxdejyn4AksMYUM2eM5gN7Xrjy</dd></div>
-    <div><dt>VM ID</dt><dd>mEUwHwfd8UTHf23UYkQxHvy1n1EGwWieXQnjmtzSryJRZckzu</dd></div>
-    <div><dt>Validator</dt><dd>NodeID-5qeQJPktXm63RrXxxkfjunFJPQCP7YeeK</dd></div>
-    <div><dt>Dogecoin peg address</dt><dd>AAvNfukpAa4iTcRJPetxuxX8XxbC5gFqUM</dd></div>
+    <div><dt>VM ID</dt><dd>kMtihm7W3KssmcJb9mzwZfC6gkiPrJhWaa5KMLHdEB9R8Q4pp</dd></div>
   </dl>
 
-  <h2>How DOGE moves</h2>
-  <p>Every DOGE on DogecoinVM is backed by a DOGE locked on Dogecoin, and anyone can check both sides. The bridge enforces one invariant: <span class="mono">locked on Dogecoin ≥ circulating on DogecoinVM + pending</span>. If that ever fails, it stops.</p>
+  <h2>How BTC moves</h2>
+  <p>Every BTC on BTCVM is backed by BTC locked on Bitcoin, and anyone can check both sides. The bridge enforces one invariant: <span class="mono">locked on Bitcoin ≥ circulating on BTCVM + pending</span>. If that ever fails, it stops.</p>
 
-  <div class="diagram"><img src="roadmap-diagram.png" width="760" height="1182" alt="How DOGE moves: DOGE sent to a personal deposit address on Dogecoin is locked there; after 20 confirmations the bridge credits the same amount on DogecoinVM from the peg reserve; a withdrawal sent back to the reserve is paid out from the locked DOGE on Dogecoin."></div>
+  <div class="diagram"><img src="roadmap-diagram.png" width="760" height="1182" alt="How BTC moves: BTC sent to a personal deposit address on Bitcoin is locked there; after enough confirmations the bridge credits the same amount on BTCVM from the peg reserve; a withdrawal sent back to the reserve is paid out from the locked BTC on Bitcoin."></div>
 
   <div class="flow">
     <section>
-      <h3>Deposit: <span class="doge">Dogecoin</span> to <span class="vm">DogecoinVM</span></h3>
+      <h3>Deposit: <span class="btc">Bitcoin</span> to <span class="vm">BTCVM</span></h3>
       <ol>
-        <li>The wallet gives each user a personal Dogecoin deposit address. Its script commits to the user's DogecoinVM address, followed by a 2-of-3 multisig of the peg signers. The browser derives the address itself and refuses to show one that doesn't match.</li>
-        <li>After enough Dogecoin confirmations for the deposit's size (1 for 1 DOGE, up to 20 above 50 DOGE), the signers release the same amount from the peg reserve to the user's DogecoinVM address, less a 0.01 DOGE fee. The release is tagged with the deposit it pays for, so a deposit can't be credited twice.</li>
-        <li>Deposits over the beta cap, or arriving while the total is at its limit, are held and can be refunded on Dogecoin.</li>
+        <li>The wallet gives each user a personal Bitcoin deposit address, a P2WSH (bc1q…) address that any wallet can send to. Its script commits to the user's BTCVM address, followed by a 2-of-3 multisig of the peg signers. The browser derives the address itself and refuses to show one that doesn't match.</li>
+        <li>After enough Bitcoin confirmations for the deposit's size (6 by default, about an hour; smaller deposits may need fewer), the signers release the same amount from the peg reserve to the user's BTCVM address, less the bridge fee. The release is tagged with the deposit it pays for, so a deposit can't be credited twice.</li>
+        <li>Deposits over the beta cap, or arriving while the total is at its limit, are held and can be refunded on Bitcoin.</li>
       </ol>
     </section>
     <section>
-      <h3>Withdrawal: <span class="vm">DogecoinVM</span> to <span class="doge">Dogecoin</span></h3>
+      <h3>Withdrawal: <span class="vm">BTCVM</span> to <span class="btc">Bitcoin</span></h3>
       <ol>
-        <li>The user sends DOGE back to the peg reserve with a tag naming a Dogecoin address.</li>
-        <li>Once that transaction is final on DogecoinVM, which takes seconds, the signers pay the Dogecoin address from the locked DOGE, less a 0.1 DOGE network fee. The minimum withdrawal is 2 DOGE.</li>
+        <li>The user sends BTC back to the peg reserve with a tag naming a Bitcoin address.</li>
+        <li>Once that transaction is final on BTCVM, which takes seconds, the signers pay the Bitcoin address from the locked BTC, less the Bitcoin network fee at Bitcoin Core's current two-block estimate, kept within the signers' policy range. The payout usually confirms in about 10 minutes.</li>
+        <li>Payouts are replaceable (BIP125). If one is still unconfirmed after 30 minutes and fees have risen, the bridge replaces it with one paying the current rate. The replacement spends the same coins, so only one of them can confirm.</li>
       </ol>
     </section>
   </div>
@@ -93,15 +72,15 @@
   <p>The peg is a 2-of-3 multisig: any two of the three signer keys together can move funds. Those keys control both sides of the bridge.</p>
   <div class="keys">
     <section>
-      <h3 class="doge">On Dogecoin</h3>
-      <p>The locked DOGE: the peg address and every personal deposit address. These are the real coins users sent in.</p>
+      <h3 class="btc">On Bitcoin</h3>
+      <p>The locked BTC: the peg address and every personal deposit address. These are the real coins users sent in.</p>
     </section>
     <section>
-      <h3 class="vm">On DogecoinVM</h3>
-      <p>The reserve created at genesis. Releasing it is how a deposit is credited, so it decides how much bridged DOGE exists.</p>
+      <h3 class="vm">On BTCVM</h3>
+      <p>The reserve created by consensus in the chain's first block. Releasing it is how a deposit is credited, so it decides how much bridged BTC exists.</p>
     </section>
   </div>
-  <p>Two key holders acting together could take the locked DOGE, or credit DOGE with nothing behind it. The defence is independence: separate people, on separate machines, each checking the chains through their own nodes.</p>
+  <p>Two key holders acting together could take the locked BTC, or credit BTC with nothing behind it. The defence is independence: separate people, on separate machines, each checking the chains through their own nodes.</p>
   <p>In the separate-signer design, the bridge process holds no keys. It proposes each transaction, and every signer checks it against its own view of both chains:</p>
   <ul class="plain">
     <li>The action is really owed: a confirmed deposit not yet credited, a final withdrawal not yet paid, or a refund its operator approved.</li>
@@ -109,11 +88,11 @@
     <li>The signer has not already signed another transaction that could pay the same thing twice.</li>
     <li>It stays within that signer's own daily limit.</li>
   </ul>
-  <p>A compromised bridge server can then delay transfers but can't move locked DOGE.</p>
+  <p>A compromised bridge server can then delay transfers but can't move locked BTC.</p>
   <p>Signing is automatic. Each signer is a service that applies these rules by itself, so deposits and withdrawals go through in the time it takes to reach the required confirmations, with no one approving them by hand. People act only to approve refunds and to change the rules, which means a new signer set that every operator joins.</p>
 
   <h3>Bringing signers in: the setup ceremony</h3>
-  <p><code>dogevm signer-setup</code> takes each operator through setup. Only public information changes hands: no private key, password or token is ever sent to anyone. It runs interactively for a person, or with flags for automated operators. Without a terminal, the join step requires the fingerprint the operators confirmed, so no script can approve a signer set on its own.</p>
+  <p><code>btcvm signer-setup</code> takes each operator through setup. Only public information changes hands: no private key, password or token is ever sent to anyone. It runs interactively for a person, or with flags for automated operators. Without a terminal, the join step requires the fingerprint the operators confirmed, so no script can approve a signer set on its own.</p>
   <div class="table-wrap">
   <table>
     <thead><tr><th>Step</th><th>Who</th><th>What happens</th></tr></thead>
@@ -126,32 +105,32 @@
     </tbody>
   </table>
   </div>
-  <p>Each operator runs a full Dogecoin Core node, a DogecoinVM node and the signer service. The tests run the whole ceremony, then a deposit and a withdrawal signed by separate signers.</p>
+  <p>Each operator runs a full Bitcoin Core node, a BTCVM node and the signer service. The tests run the whole ceremony, then a deposit and a withdrawal signed by separate signers.</p>
 
   <h3>How far the trust can be spread</h3>
-  <p>Releasing locked DOGE will always need a threshold of signers: Dogecoin's script can check signatures and time locks, but not what happened on another chain. So the bridge can be decentralised, with many independent signers, but not made trustless on the Dogecoin side until Dogecoin itself changes. What can change is how many parties must collude, who they are, and what it costs them.</p>
+  <p>Releasing locked BTC will always need a threshold of signers: Bitcoin's script can check signatures and time locks, but not what happened on another chain. So the bridge can be decentralised, with many independent signers, but not made trustless on the Bitcoin side until Bitcoin itself changes. What can change is how many parties must collude, who they are, and what it costs them.</p>
   <div class="table-wrap">
   <table>
     <thead><tr><th>Stage</th><th>What you trust</th><th class="state">State</th></tr></thead>
     <tbody>
       <tr><td>One operator</td><td>The beta: every key on one server, one operator. The caps limit what's at risk.</td><td class="state"><span class="chip wait">Today</span></td></tr>
       <tr><td>Independent signers</td><td>That fewer than the threshold of known, separate key holders collude: 2 of 3, then 3 of 5.</td><td class="state"><span class="chip wait">Staged</span></td></tr>
-      <tr><td>Metal validators as signers</td><td>That no two-thirds of the chain's own validators collude: the same assumption that secures DogecoinVM itself.</td><td class="state"><span class="chip plan">Planned</span></td></tr>
+      <tr><td>Metal validators as signers</td><td>That no two-thirds of the chain's own validators collude: the same assumption that secures BTCVM itself.</td><td class="state"><span class="chip plan">Planned</span></td></tr>
       <tr><td>Bonded signers</td><td>As above, but signing anything the rules don't allow forfeits collateral worth more than the signer could take.</td><td class="state"><span class="chip plan">Planned</span></td></tr>
-      <tr><td>Deposits on proofs</td><td>No one, for deposits: validators check the Dogecoin deposit themselves. Signers only guard withdrawals.</td><td class="state"><span class="chip plan">Planned</span></td></tr>
+      <tr><td>Deposits on proofs</td><td>No one, for deposits: validators check the Bitcoin deposit themselves. Signers only guard withdrawals.</td><td class="state"><span class="chip plan">Planned</span></td></tr>
     </tbody>
   </table>
   </div>
-  <p><strong>What an operator runs.</strong> Metal validators already run metalgo, so a signer adds a Dogecoin Core node with a transaction index (about 230 GB of SSD today, growing by roughly 25 to 30 GB a year, a few GB of memory, and a day or so to sync), DogecoinVM on their node, and the light signer service. The plan is to package all of it as one install, plus the ceremony.</p>
-  <p><strong>Two limits.</strong> A Dogecoin multisig script holds at most about 15 keys, so a larger signer set needs threshold signatures, where many signers produce one ordinary signature together. And every change to the signer set moves the locked DOGE to a new multisig address, which is what key rotation does.</p>
+  <p><strong>What an operator runs.</strong> Metal validators already run metalgo, so a signer adds a Bitcoin Core node with a transaction index (about 700 GB of SSD today), BTCVM on their node, and the light signer service. The plan is to package all of it as one install, plus the ceremony.</p>
+  <p><strong>Two limits.</strong> A Bitcoin multisig script holds at most 20 keys, so a larger signer set needs threshold signatures, where many signers produce one ordinary signature together. And every change to the signer set moves the locked BTC to a new multisig address, which is what key rotation does.</p>
 
   <h2>Safety built in today</h2>
   <ul class="plain">
-    <li><strong>Consensus-enforced supply.</strong> Blocks that create reserve DOGE in the wrong amount, to the wrong address or at the wrong height are invalid, so no other code path can create DOGE.</li>
-    <li><strong>Solvency check before every action.</strong> The bridge audits both chains and moves nothing unless locked DOGE covers circulating DOGE plus pending transfers.</li>
-    <li><strong>Beta caps.</strong> 100 DOGE per deposit and 1,000 DOGE in total, so the most that can be at risk is known in advance.</li>
+    <li><strong>Consensus-enforced supply.</strong> Blocks that create reserve BTC in the wrong amount, to the wrong address or at the wrong height are invalid, so no other code path can create BTC.</li>
+    <li><strong>Solvency check before every action.</strong> The bridge audits both chains and moves nothing unless locked BTC covers circulating BTC plus pending transfers.</li>
+    <li><strong>Beta caps.</strong> A cap on each deposit and on the total circulating on BTCVM, so the most that can be at risk is known in advance.</li>
     <li><strong>A wallet that checks the server.</strong> The browser verifies deposit addresses and the value of every coin it spends against the raw transactions, caps fees, and computes transaction IDs itself. A strict content security policy limits what the page can load.</li>
-    <li><strong>Refunds and alerts.</strong> Held deposits can be returned on Dogecoin. Health checks alert on insolvency, overdue transfers, stalled nodes and a low validator balance.</li>
+    <li><strong>Refunds and alerts.</strong> Held deposits can be returned on Bitcoin. Health checks alert on insolvency, overdue transfers, stalled nodes and a low validator balance.</li>
     <li><strong>No secrets in the source.</strong> Every commit and push is scanned for private keys, tokens and passwords, both locally and in CI, and GitHub push protection is on. Keys live only on the machines that use them.</li>
     <li><strong>Tests.</strong> Consensus, VM, bridge and wallet tests, including one that runs the browser's signing code and checks its transactions against the Go script engine.</li>
   </ul>
@@ -164,9 +143,9 @@
     <tbody>
       <tr><td>Signer keys aren't yet held by independent operators</td><td>Until they are, the 2-of-3 multisig doesn't protect against a single operator. The software and setup ceremony to fix this are built; switching over needs independent operators.</td><td class="state"><span class="chip plan">Phase 3</span></td></tr>
       <tr><td>One validator</td><td>The chain stops if that node stops, and consensus is only as trustworthy as one operator.</td><td class="state"><span class="chip plan">Phase 3</span></td></tr>
-      <tr><td>The signers credit deposits</td><td>Two signers acting together could credit DOGE on DogecoinVM that isn't backed on Dogecoin.</td><td class="state"><span class="chip plan">Phase 5</span></td></tr>
+      <tr><td>The signers credit deposits</td><td>Two signers acting together could credit BTC on BTCVM that isn't backed on Bitcoin.</td><td class="state"><span class="chip plan">Phase 5</span></td></tr>
       <tr><td>No external audit</td><td>The bridge and consensus changes have only been reviewed internally.</td><td class="state"><span class="chip plan">Phase 4</span></td></tr>
-      <tr><td>A single Dogecoin node</td><td>The bridge sees Dogecoin through one node it runs itself.</td><td class="state"><span class="chip plan">Phase 4</span></td></tr>
+      <tr><td>A single Bitcoin node</td><td>The bridge sees Bitcoin through one node it runs itself.</td><td class="state"><span class="chip plan">Phase 4</span></td></tr>
       <tr><td>Beta caps</td><td>Deliberate for now; they're raised only once the items above are done.</td><td class="state"><span class="chip plan">Phase 7</span></td></tr>
     </tbody>
   </table>
@@ -177,41 +156,42 @@
 
   <ol class="phases">
     <li class="phase done">
-      <div class="phase-head"><h3>Build and launch the beta</h3><span class="chip live">Done</span></div>
+      <div class="phase-head"><h3>Build for Bitcoin</h3><span class="chip live">Done</span></div>
       <ul>
-        <li>DogecoinVM running on Metal Blockchain's current release, with Dogecoin chain parameters, fee and dust policy, and the consensus-enforced peg reserve.</li>
-        <li>Bridge with personal deposit addresses, solvency audit, caps, refunds and a health monitor.</li>
-        <li>Web wallet, explorer and proof of reserves at metaldoge.com; the L1 created and converted on Metal mainnet.</li>
+        <li>BTCVM on Metal Blockchain's current release, with Bitcoin's chain parameters and rules, SegWit and Taproot active from the first block, Bitcoin Core's fee and dust policy, and the consensus-enforced peg reserve.</li>
+        <li>Bridge with personal SegWit deposit addresses, payouts at Bitcoin's live fee rate, replaceable payouts, a solvency audit, caps, refunds and a health monitor, tested against btcd's script engine.</li>
+        <li>Web wallet with native SegWit addresses, explorer and proof of reserves.</li>
       </ul>
-    </li>
-    <li class="phase done">
-      <div class="phase-head"><h3>Prove the round trip</h3><span class="chip live">Done</span></div>
-      <ul>
-        <li>The bridge's Dogecoin node synced; the first deposit credited and a withdrawal paid back to Dogecoin, on 23 September 2026 (<a href="#the-first-round-trip">transactions above</a>).</li>
-        <li>The wallet's one-click move from its Dogecoin balance, reviewed and signed in the browser.</li>
-        <li>HTTPS enforced, daily encrypted off-server backups of bridge state and the deposit registry, and a restore tested against the live keys.</li>
-      </ul>
-      <p class="gate"><strong>Done:</strong> each direction has transaction IDs on both chains, visible in the explorer, and proof of reserves matches.</p>
     </li>
     <li class="phase now">
-      <div class="phase-head"><h3>Remove single points of failure</h3><span class="chip wait">In progress</span></div>
+      <div class="phase-head"><h3>Prove the round trip</h3><span class="chip wait">Next</span></div>
+      <ul>
+        <li><span class="step-tag todo">Next</span>Host the bridge's Bitcoin node, Bitcoin Core with a transaction index, and let it sync.</li>
+        <li><span class="step-tag todo">Next</span>A first small mainnet round trip (<a href="#the-first-round-trip">above</a>): a deposit credited on BTCVM, then a withdrawal paid back to Bitcoin.</li>
+        <li>The wallet's one-click move from its Bitcoin balance, reviewed and signed in the browser.</li>
+        <li>HTTPS enforced, daily encrypted off-server backups of bridge state and the deposit registry, and a restore tested against the live keys.</li>
+      </ul>
+      <p class="gate"><strong>Done when</strong> each direction has transaction IDs on both chains, visible in the explorer, and proof of reserves matches.</p>
+    </li>
+    <li class="phase">
+      <div class="phase-head"><h3>Remove single points of failure</h3><span class="chip wait">Partly built</span></div>
       <ul>
         <li><span class="step-tag">Built</span><strong>Signer service.</strong> A bridge process that holds no keys, and a signer service per key holder that checks every transaction against its own nodes before signing, with a signing log and a daily limit.</li>
-        <li><span class="step-tag">Built</span><strong>Setup ceremony</strong> (<code>dogevm signer-setup</code>): cards, a signer set with a fingerprint, service files and health checks. The existing keys can be imported, so the peg address and the funds stay where they are.</li>
-        <li><span class="step-tag">Built</span><strong>Staged with the live keys.</strong> Each key in its own signer service and a coordinator that holds none, with the peg address unchanged. Next: move the live bridge onto them.</li>
-        <li><span class="step-tag todo">Next</span><strong>Independent operators.</strong> At least two people or organisations besides us, each running their own Dogecoin and DogecoinVM nodes and a signer, brought in through the ceremony. Then grow from 2-of-3 to 3-of-5.</li>
-        <li><span class="step-tag todo">Next</span><strong>Metal validators as signers.</strong> A one-command install of the signer, a Dogecoin node and DogecoinVM for Metal validators, who already run the infrastructure. Grow to 5 to 7 validator signers with a two-thirds threshold, so the bridge is secured by the same operators as the chain.</li>
-        <li><span class="step-tag todo">Next</span><strong>Key rotation.</strong> Move the locked DOGE and the reserve to a new signer set made entirely by the new operators, retiring the beta's keys.</li>
+        <li><span class="step-tag">Built</span><strong>Setup ceremony</strong> (<code>btcvm signer-setup</code>): cards, a signer set with a fingerprint, service files and health checks. The existing keys can be imported, so the peg address and the funds stay where they are.</li>
+        <li><span class="step-tag todo">Next</span><strong>Move the bridge onto them.</strong> Each key in its own signer service and a coordinator that holds none, with the peg address unchanged.</li>
+        <li><span class="step-tag todo">Next</span><strong>Independent operators.</strong> At least two people or organisations besides us, each running their own Bitcoin and BTCVM nodes and a signer, brought in through the ceremony. Then grow from 2-of-3 to 3-of-5.</li>
+        <li><span class="step-tag todo">Next</span><strong>Metal validators as signers.</strong> A one-command install of the signer, a Bitcoin node and BTCVM for Metal validators, who already run the infrastructure. Grow to 5 to 7 validator signers with a two-thirds threshold, so the bridge is secured by the same operators as the chain.</li>
+        <li><span class="step-tag todo">Next</span><strong>Key rotation.</strong> Move the locked BTC and the reserve to a new signer set made entirely by the new operators, retiring the beta's keys.</li>
         <li><span class="step-tag todo">Next</span>Hardware-backed storage for signer keys.</li>
         <li><span class="step-tag todo">Next</span><strong>At least three validators</strong> run by different operators, with a validator manager, so validators can be added and replaced without relaunching the chain.</li>
       </ul>
-      <p class="gate"><strong>Done when</strong> no single machine or operator can move locked DOGE or halt the chain.</p>
+      <p class="gate"><strong>Done when</strong> no single machine or operator can move locked BTC or halt the chain.</p>
     </li>
     <li class="phase">
       <div class="phase-head"><h3>Audit and harden</h3><span class="chip plan">Planned</span></div>
       <ul>
-        <li>External security audit of the consensus changes, bridge and wallet signing, then fix what it finds.</li>
-        <li>Have signers cross-check Dogecoin through more than one node.</li>
+        <li>An outside security review of the consensus changes, bridge and wallet signing before larger amounts, then fix what it finds.</li>
+        <li>Have signers cross-check Bitcoin through more than one node.</li>
         <li>More transfers from separate wallets, including a deposit over the beta limit, held, and its refund.</li>
         <li><span class="step-tag">Built</span>An emergency pause that stops all signing, and a written runbook for incidents, refunds and restoring from the daily encrypted backups. Next: rehearse it once, and a public bug bounty.</li>
         <li><strong>Bonded signers.</strong> Each signer locks collateral that is forfeited if they sign anything the rules don't allow. Theft stays possible in principle, but it becomes costly.</li>
@@ -222,20 +202,20 @@
     <li class="phase">
       <div class="phase-head"><h3>Deposits without signers</h3><span class="chip plan">Planned</span></div>
       <ul>
-        <li>A DogecoinVM upgrade in which the validators follow Dogecoin's block headers themselves, and the reserve releases a deposit's DOGE only with proof that the deposit is buried 20 blocks deep in Dogecoin's chain.</li>
-        <li>No signer is involved in crediting a deposit, and nobody, the signers included, can create DogecoinVM DOGE that isn't backed by DOGE locked on Dogecoin.</li>
-        <li>Signers remain for withdrawals only. Dogecoin's script can check signatures and time locks but not another chain, so releasing locked DOGE needs signers on every DOGE bridge until Dogecoin itself changes.</li>
+        <li>A BTCVM upgrade in which the validators follow Bitcoin's block headers themselves, and the reserve releases a deposit's BTC only with proof that the deposit is buried enough blocks deep in Bitcoin's chain.</li>
+        <li>No signer is involved in crediting a deposit, and nobody, the signers included, can create BTCVM BTC that isn't backed by BTC locked on Bitcoin.</li>
+        <li>Signers remain for withdrawals only. Bitcoin's script can check signatures and time locks but not another chain, so releasing locked BTC needs signers on every BTC bridge until Bitcoin itself changes.</li>
       </ul>
       <p class="gate"><strong>Done when</strong> the upgrade has been audited, activated by the validators, and deposits are credited on proofs alone.</p>
     </li>
     <li class="phase">
       <div class="phase-head"><h3>Native passkey accounts</h3><span class="chip plan">Planned</span></div>
       <ul>
-        <li>A DogecoinVM upgrade that accepts passkey signatures (WebAuthn, P-256) alongside Dogecoin's own, as Ethereum is doing with RIP-7212. Touch ID, Face ID, 1Password, and any FIDO security key (even older U2F-only keys) can then sign DogecoinVM transactions directly.</li>
+        <li>A BTCVM upgrade that accepts passkey signatures (WebAuthn, P-256) alongside Bitcoin's own, as Ethereum is doing with RIP-7212. Touch ID, Face ID, 1Password, and any FIDO security key (even older U2F-only keys) can then sign BTCVM transactions directly.</li>
         <li>No seed phrase and no private key held in the browser: the passkey is the account, backed up and synced by the user's password manager or kept on a hardware key.</li>
         <li>Recovery built in: an account can name a second passkey or a time-delayed recovery key.</li>
         <li>Today's wallet already uses passkeys to encrypt the key. That works only where the passkey supports the PRF extension, such as 1Password. Native accounts remove that limit.</li>
-        <li>Scope: DogecoinVM only. DOGE on Dogecoin itself still needs a Dogecoin key, since Dogecoin's rules are not ours to change.</li>
+        <li>Scope: BTCVM only. BTC on Bitcoin itself still needs a Bitcoin key, since Bitcoin's rules are not ours to change.</li>
       </ul>
       <p class="gate"><strong>Done when</strong> the upgrade has been audited, activated by the validators at a set block height, and a passkey-only wallet has made a round trip through the bridge.</p>
     </li>
@@ -243,8 +223,8 @@
       <div class="phase-head"><h3>Open up</h3><span class="chip plan">Planned</span></div>
       <ul>
         <li>Raise the caps in steps, with the proof of reserves at each step.</li>
-        <li><strong>Threshold signatures.</strong> Beyond about 15 signers, a Dogecoin multisig no longer fits, so every Metal validator could sign only through threshold ECDSA: many signers producing one ordinary signature. It's substantial cryptography, taken on once the signer set needs to grow past a multisig.</li>
-        <li><strong>Atomic swaps.</strong> DogecoinVM runs Dogecoin's own script language, so DOGE on Dogecoin can be swapped for DOGE on DogecoinVM with hash-locked payments: both sides complete, or both are refunded. It needs no bridge and no signers, only someone on the other side of the swap, such as a market maker, which makes for fast, trustless exits alongside the bridge.</li>
+        <li><strong>Threshold signatures.</strong> Beyond 20 signers, a Bitcoin multisig no longer fits, so every Metal validator could sign only through threshold signatures: many signers producing one ordinary signature. It's substantial cryptography, taken on once the signer set needs to grow past a multisig.</li>
+        <li><strong>Atomic swaps.</strong> BTCVM runs Bitcoin's own script language, so BTC on Bitcoin can be swapped for BTC on BTCVM with hash-locked payments: both sides complete, or both are refunded. It needs no bridge and no signers, only someone on the other side of the swap, such as a market maker, which makes for fast, trustless exits alongside the bridge.</li>
         <li>Support for wallets and developer tools beyond the web wallet: standard RPC endpoints and a documented API.</li>
         <li>Public infrastructure: open RPC nodes and a hosted explorer with an uptime history.</li>
       </ul>
@@ -254,9 +234,8 @@
 
   <h2>Verify it yourself</h2>
   <ul class="plain">
-    <li>Use the bridge and explorer at <a href="https://metaldoge.com">metaldoge.com</a>. Proof of reserves lists every locked Dogecoin output, and each links to a public Dogecoin explorer.</li>
+    <li>Use the bridge and explorer at <a href="https://metalbtc.com">metalbtc.com</a>. Proof of reserves lists every locked Bitcoin output, and each links to a public Bitcoin explorer.</li>
     <li>Read or build the source at <a href="https://github.com/MetalBlockchain/btcvm">github.com/MetalBlockchain/btcvm</a>, which has the VM plugin, bridge, wallet and deployment scripts.</li>
-    <li>Look up the subnet, chain and validator IDs above on Metal Blockchain's P-Chain.</li>
   </ul>
   <p class="note">This roadmap describes engineering work and its order; it isn't a schedule.</p>
 </main>

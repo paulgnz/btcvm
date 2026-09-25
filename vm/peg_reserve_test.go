@@ -3,6 +3,7 @@ package vm
 import (
 	"bytes"
 	"context"
+	"crypto/sha256"
 	"errors"
 	"testing"
 
@@ -231,4 +232,73 @@ func TestApplyChainConfig(t *testing.T) {
 		err := applyChainConfig(&cfg, []byte(`{"`+key+`":true}`))
 		require.ErrorContains(err, "consensus setting", key)
 	}
+}
+
+// TestPegReserveReleaseSegWit spends a P2WSH peg reserve, as the bridge
+// does, through the mempool's policy, block building (with its witness
+// commitment) and consensus, and pays a native SegWit address.
+func TestPegReserveReleaseSegWit(t *testing.T) {
+	require := require.New(t)
+	ctx := context.Background()
+	params := &btcd.BTCVMTestNetParams
+
+	signers := newPegSigners(t, params)
+	witnessHash := sha256.Sum256(signers.redeemScript)
+	reserve, err := btcutil.NewAddressWitnessScriptHash(witnessHash[:], params)
+	require.NoError(err)
+	reserveScript, err := txscript.PayToAddrScript(reserve)
+	require.NoError(err)
+	vm := setupVMWithConfig(t, map[string]any{
+		"pegReserveAddress": reserve.EncodeAddress(),
+		"pegReserveBlocks":  1,
+	})
+
+	blk := buildBlock(t, vm)
+	require.NoError(blk.Verify(ctx))
+	require.NoError(blk.Accept(ctx))
+	coinbase := blk.btcBlock.Transactions()[0]
+	idx := -1
+	for i, out := range coinbase.MsgTx().TxOut {
+		if bytes.Equal(out.PkScript, reserveScript) {
+			idx = i
+		}
+	}
+	require.GreaterOrEqual(idx, 0)
+
+	user, err := btcutil.NewAddressWitnessPubKeyHash(bytes.Repeat([]byte{0x77}, 20), params)
+	require.NoError(err)
+	userScript, err := txscript.PayToAddrScript(user)
+	require.NoError(err)
+
+	const credit = 50_000_000 // 0.5 BTC
+	const fee = 1_000
+	amount := int64(btcd.PegReserveAmountPerBlock)
+	tx := wire.NewMsgTx(2)
+	tx.AddTxIn(wire.NewTxIn(wire.NewOutPoint(coinbase.Hash(), uint32(idx)), nil, nil))
+	tx.AddTxOut(wire.NewTxOut(credit, userScript))
+	tx.AddTxOut(wire.NewTxOut(amount-credit-fee, reserveScript))
+
+	fetcher := txscript.NewCannedPrevOutputFetcher(reserveScript, amount)
+	hashes := txscript.NewTxSigHashes(tx, fetcher)
+	witness := wire.TxWitness{nil}
+	for _, key := range signers.keys[:2] {
+		sig, err := txscript.RawTxInWitnessSignature(tx, hashes, 0, amount, signers.redeemScript, txscript.SigHashAll, key)
+		require.NoError(err)
+		witness = append(witness, sig)
+	}
+	tx.TxIn[0].Witness = append(witness, signers.redeemScript)
+
+	_, err = vm.btcdAdapter.TxMemPool().ProcessTransaction(btcutil.NewTx(tx), false, false, 0)
+	require.NoError(err)
+
+	next := buildBlock(t, vm)
+	require.Len(next.btcBlock.Transactions(), 2)
+	require.True(next.btcBlock.MsgBlock().Transactions[1].HasWitness())
+	require.NoError(next.Verify(ctx))
+	require.NoError(next.Accept(ctx))
+
+	entry, err := vm.chain.FetchUtxoEntry(wire.OutPoint{Hash: tx.TxHash(), Index: 0})
+	require.NoError(err)
+	require.NotNil(entry)
+	require.Equal(int64(credit), entry.Amount())
 }

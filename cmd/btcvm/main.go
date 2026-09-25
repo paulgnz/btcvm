@@ -44,8 +44,8 @@ Peg (users):
   btcvm peg-in -signers FILE -to VMADDR -amount BTC
       deposit from the Bitcoin Core wallet at BITCOIN_RPC to the peg,
       credited to VMADDR on BTCVM
-  btcvm peg-out -signers FILE -key KEY -to DOGEADDR -amount BTC
-      send BTC from BTCVM back to DOGEADDR on Bitcoin
+  btcvm peg-out -signers FILE -key KEY -to BTCADDR -amount BTC
+      send BTC from BTCVM back to BTCADDR on Bitcoin
 
 Bridge (peg signers):
   btcvm signers -required M -total N -out FILE
@@ -54,7 +54,7 @@ Bridge (peg signers):
   btcvm bridge -signers FILE [-once]         run the bridge
   btcvm audit -signers FILE                  check the peg is fully backed
   btcvm refund -signers FILE -list           deposits that are held or not yet credited
-  btcvm refund -signers FILE -deposit TXID:VOUT [-to DOGEADDR]
+  btcvm refund -signers FILE -deposit TXID:VOUT [-to BTCADDR]
       return a held deposit, less the Bitcoin fee, to its sender (or -to)
   btcvm monitor -signers FILE [-webhook URL]  alert when a health check fails
   btcvm pause -signers FILE -reason TEXT     emergency stop: sign and pay nothing (a signer: -dir DIR)
@@ -356,7 +356,7 @@ func cmdSigners(args []string) error {
 	total := fs.Int("total", 3, "number of signers")
 	out := fs.String("out", "", "file to write the signer set to (contains private keys, unless -public-keys)")
 	publicKeys := fs.String("public-keys", "", "comma-separated signer public keys (from btcvm signer-key); the set then holds no private keys")
-	blocks := fs.Int("reserve-blocks", 1, "pegReserveBlocks for the genesis config (9 billion BTC each)")
+	blocks := fs.Int("reserve-blocks", 1, "pegReserveBlocks for the genesis config (20,999,000 BTC each)")
 	if err := parseFlags(fs, &s, args); err != nil {
 		return err
 	}
