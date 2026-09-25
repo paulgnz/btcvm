@@ -88,13 +88,13 @@ cmd_run() {
     cp -a "$f" "$root$(dirname "$f")/"
   done
 
-  # The watch-only wallet, copied consistently by Bitcoin Core itself.
-  # Rebuilding it instead means a rescan of the whole chain.
-  # Bitcoin Core 1.14 writes wallet backups into its own backups/ folder,
-  # whatever path it is given.
+  # The bridge's watch-only wallet, copied consistently by Bitcoin Core
+  # itself. A pruned node can't rescan old blocks, so this copy is the only
+  # way back to the peg's history if the wallet is lost.
   local wallet=btcvm-wallet-$stamp.dat
-  if sudo -u btcvm /opt/bitcoin/bin/bitcoin-cli -datadir="$BTC_DIR" backupwallet "$wallet" 2>/dev/null &&
-    [[ -f "$BTC_DIR/backups/$wallet" ]]; then
+  install -d -o btcvm -g btcvm -m 700 "$BTC_DIR/backups"
+  if sudo -u btcvm /opt/bitcoin/bin/bitcoin-cli -datadir="$BTC_DIR" -rpcwallet=btcvm \
+    backupwallet "$BTC_DIR/backups/$wallet" 2>/dev/null && [[ -f "$BTC_DIR/backups/$wallet" ]]; then
     mkdir -p "$root$BTC_DIR"
     mv "$BTC_DIR/backups/$wallet" "$root$BTC_DIR/wallet.dat"
   else
