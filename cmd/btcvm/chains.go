@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"math"
 	"strings"
+	"sync"
 	"sync/atomic"
 	"time"
 
@@ -174,6 +175,9 @@ func sendRaw(rpc *rpcClient, tx *wire.MsgTx) (chainhash.Hash, error) {
 type btcChain struct {
 	rpc     *rpcClient // the wallet's endpoint, .../wallet/NAME
 	indexed atomic.Bool
+
+	mu    sync.Mutex
+	known map[string]*knownTx // wallet transactions read so far, by txid
 }
 
 // walletName is the wallet part of an RPC URL ending in /wallet/NAME.
@@ -315,8 +319,10 @@ func (c *btcChain) txsFor(addresses []btcutil.Address) ([]chainTx, error) {
 	}
 	scripts := scriptSet(addresses)
 	var entries []struct {
-		TxID    string `json:"txid"`
-		Address string `json:"address"`
+		TxID             string   `json:"txid"`
+		Confirmations    int64    `json:"confirmations"`
+		Time             int64    `json:"time"`
+		MempoolConflicts []string `json:"mempoolconflicts"`
 	}
 	if err := c.rpc.callNamed(&entries, "listtransactions", map[string]any{"count": 1_000_000}); err != nil {
 		return nil, err
@@ -329,68 +335,90 @@ func (c *btcChain) txsFor(addresses []btcutil.Address) ([]chainTx, error) {
 			continue
 		}
 		seen[e.TxID] = true
-
-		var t struct {
-			Hex              string   `json:"hex"`
-			Confirmations    int64    `json:"confirmations"`
-			Time             int64    `json:"time"`
-			MempoolConflicts []string `json:"mempoolconflicts"`
-		}
-		if err := c.rpc.callNamed(&t, "gettransaction", map[string]any{"txid": e.TxID}); err != nil {
-			return nil, err
-		}
 		// A transaction that conflicts with one in a block (negative
 		// confirmations), or that a transaction in the mempool replaced,
 		// will not confirm. Only the signers can spend peg outputs, so the
 		// replacement is theirs, and it is listed in its place.
-		if t.Confirmations < 0 || (t.Confirmations == 0 && len(t.MempoolConflicts) > 0) {
+		if e.Confirmations < 0 || (e.Confirmations == 0 && len(e.MempoolConflicts) > 0) {
 			continue
 		}
-		tx, err := decodeTx(t.Hex)
+		known, err := c.walletTx(e.TxID)
 		if err != nil {
 			return nil, err
 		}
-		ok, err := touches(tx, scripts, c)
-		if err != nil {
-			return nil, err
-		}
-		if ok {
-			txs = append(txs, chainTx{tx: tx, confirmations: t.Confirmations, time: t.Time})
+		if known.touches(scripts) {
+			txs = append(txs, chainTx{tx: known.tx, confirmations: e.Confirmations, time: e.Time})
 		}
 	}
 	return txs, nil
 }
 
-// touches reports whether tx pays to one of scripts or spends an output
-// paying to one. The wallet lists only transactions that do one or the
-// other, so a transaction whose inputs can't be read fails rather than
-// being dropped: dropping a peg payout would hide that it was paid.
-func touches(tx *wire.MsgTx, scripts map[string]bool, c *btcChain) (bool, error) {
-	for _, out := range tx.TxOut {
+// knownTx is a wallet transaction and the output script each of its inputs
+// spends: what never changes about it, so it is read from the node once.
+// Its confirmations and conflicts come fresh from each listing.
+type knownTx struct {
+	tx          *wire.MsgTx
+	prevScripts [][]byte // nil for a coinbase input
+}
+
+// touches reports whether the transaction pays to one of scripts or spends
+// an output paying to one.
+func (k *knownTx) touches(scripts map[string]bool) bool {
+	for _, out := range k.tx.TxOut {
 		if scripts[string(out.PkScript)] {
-			return true, nil
+			return true
 		}
 	}
-	for _, in := range tx.TxIn {
+	for _, prev := range k.prevScripts {
+		if prev != nil && scripts[string(prev)] {
+			return true
+		}
+	}
+	return false
+}
+
+// walletTx reads a wallet transaction and the scripts its inputs spend,
+// from the cache or the node. The wallet lists only transactions that pay
+// or spend a watched address, so an input that can't be read is an error,
+// not a skip: dropping a peg payout would hide that it was paid.
+func (c *btcChain) walletTx(txid string) (*knownTx, error) {
+	c.mu.Lock()
+	known, ok := c.known[txid]
+	c.mu.Unlock()
+	if ok {
+		return known, nil
+	}
+	var t struct {
+		Hex string `json:"hex"`
+	}
+	if err := c.rpc.callNamed(&t, "gettransaction", map[string]any{"txid": txid}); err != nil {
+		return nil, err
+	}
+	tx, err := decodeTx(t.Hex)
+	if err != nil {
+		return nil, err
+	}
+	known = &knownTx{tx: tx, prevScripts: make([][]byte, len(tx.TxIn))}
+	for i, in := range tx.TxIn {
 		if in.PreviousOutPoint.Hash == (chainhash.Hash{}) {
 			continue // a coinbase
 		}
-		// Needs Bitcoin Core's -txindex for outputs the wallet did not
-		// create; requireTxIndex checks it is on.
-		var prevHex string
-		if err := c.rpc.call(&prevHex, "getrawtransaction", in.PreviousOutPoint.Hash.String(), 0); err != nil {
-			return false, fmt.Errorf("reading %v, which wallet transaction %v spends: %w", in.PreviousOutPoint.Hash, tx.TxHash(), err)
-		}
-		prevTx, err := decodeTx(prevHex)
+		prevTx, err := c.rawTx(in.PreviousOutPoint.Hash)
 		if err != nil {
-			return false, err
+			return nil, fmt.Errorf("reading %v, which wallet transaction %v spends: %w", in.PreviousOutPoint.Hash, txid, err)
 		}
-		if int(in.PreviousOutPoint.Index) < len(prevTx.TxOut) &&
-			scripts[string(prevTx.TxOut[in.PreviousOutPoint.Index].PkScript)] {
-			return true, nil
+		if int(in.PreviousOutPoint.Index) >= len(prevTx.TxOut) {
+			return nil, fmt.Errorf("wallet transaction %v spends a missing output %v", txid, in.PreviousOutPoint)
 		}
+		known.prevScripts[i] = prevTx.TxOut[in.PreviousOutPoint.Index].PkScript
 	}
-	return false, nil
+	c.mu.Lock()
+	if c.known == nil {
+		c.known = map[string]*knownTx{}
+	}
+	c.known[txid] = known
+	c.mu.Unlock()
+	return known, nil
 }
 
 // requireTxIndex fails unless Bitcoin Core runs with a synced -txindex,

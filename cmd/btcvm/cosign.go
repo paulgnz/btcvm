@@ -466,6 +466,12 @@ func (c *cosigner) check(req signRequest) (*wire.MsgTx, []spent, int64, error) {
 		}
 		seen[in.PreviousOutPoint] = true
 	}
+	// A proposal names at most the deposit address of each input, and the
+	// destination of a release: no more, so a coordinator can't fill a
+	// signer's wallet with addresses.
+	if len(req.Register) > len(tx.TxIn)+1 {
+		return nil, nil, 0, errors.New("the proposal registers more deposit addresses than it could involve")
+	}
 	for _, h := range req.Register {
 		d, err := parseDest(h)
 		if err != nil {
