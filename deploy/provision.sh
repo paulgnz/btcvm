@@ -145,8 +145,16 @@ ufw allow 8333/tcp >/dev/null   # Bitcoin peers
 ufw --force enable >/dev/null
 
 systemctl daemon-reload
-systemctl enable --now bitcoind-main metal-mainnet >/dev/null
+systemctl enable --now metal-mainnet >/dev/null
 systemctl restart metal-mainnet
+# Bitcoin Core fills a small root disk in hours, so it starts only once its
+# volume is mounted (ALLOW_ROOT_DISK=1 overrides).
+if mountpoint -q "$BTC_DATA" || [[ "${ALLOW_ROOT_DISK:-}" == 1 ]]; then
+  systemctl enable --now bitcoind-main >/dev/null
+else
+  log "$BTC_DATA is not a mounted volume: Bitcoin Core is installed but not started."
+  log "Mount a 1.5 TB+ volume there (with its contents, bitcoin.conf, moved in), then: systemctl enable --now bitcoind-main"
+fi
 
 log "done"
 cat <<EOF
