@@ -8,15 +8,21 @@ import { ripemd160 } from './vendor/noble-hashes-1.8.0/legacy.js';
 
 export const SATS = 100_000_000n;
 
-// Fee rates in sat/vB. BTCVM blocks have room to spare, so twice the relay
-// minimum always makes the next one. Bitcoin payments pay the bridge's
-// current estimate, passed in; this is the fallback.
-export const VM_FEE_RATE = 2n;
+// Bitcoin fee rates are in sat/vB: payments pay the bridge's current
+// estimate, passed in; this is the fallback.
 export const BTC_FEE_RATE = 5n;
 
-// The smallest output the wallet creates: Bitcoin Core's dust threshold
-// for the largest standard output. Change below it goes to the fee.
+// BTCVM's relay minimum is 10 sat/kvB (0.01 sat/vB), and at least 10 sats
+// for a transaction under 100 vB. BTCVM blocks have room to spare, so twice
+// the minimum always makes the next one: about 3 sats for a payment.
+export const VM_FEE_PER_KVB = 20n;
+const VM_RELAY_PER_KVB = 10n;
+
+// The smallest output the wallet creates. On Bitcoin, Core's dust threshold
+// for the largest standard output; on BTCVM, a satoshi. Change below it goes
+// to the fee.
 const DUST = 546n;
+const VM_DUST = 1n;
 
 // No payment this page builds should cost more than this in fees; a larger
 // figure means something is wrong, so refuse to sign.
@@ -422,12 +428,13 @@ function vsize(n, outputs) {
 
 // planPayment chooses which of key's P2WPKH outputs (from the API's utxo
 // list, each checked with getRawTx) pay amount to script, with an optional
-// OP_RETURN, at feeRate sat/vB, and returns the unsigned transaction: its
-// inputs, outputs, the total of the inputs, the fee, and the unsigned bytes
-// to review.
-export async function planPayment({ key, utxos, getRawTx, script, amount, data, feeRate = BTC_FEE_RATE }) {
-  if (amount < DUST) throw new Error(`the smallest payment is ${formatBTC(DUST)} BTC`);
-  feeRate = BigInt(feeRate);
+// OP_RETURN, at feeRate sat/vB on Bitcoin or BTCVM's rate (vm), and returns
+// the unsigned transaction: its inputs, outputs, the total of the inputs, the
+// fee, and the unsigned bytes to review.
+export async function planPayment({ key, utxos, getRawTx, script, amount, data, feeRate = BTC_FEE_RATE, vm = false }) {
+  const dust = vm ? VM_DUST : DUST;
+  if (amount < dust) throw new Error(`the smallest payment is ${formatBTC(dust)} BTC`);
+  const feeFor = vm ? vmFee : (size) => size * BigInt(feeRate);
   const from = keyDestination(key);
   const fromScript = pkScript(from);
   const spendable = utxos
@@ -446,14 +453,14 @@ export async function planPayment({ key, utxos, getRawTx, script, amount, data, 
     const input = await verifiedInput(u, getRawTx, fromScript);
     inputs.push(input);
     total += input.value;
-    fee = vsize(inputs.length, [...outputs, change]) * feeRate;
+    fee = feeFor(vsize(inputs.length, [...outputs, change]));
     if (total >= amount + fee) break;
   }
   if (total < amount + fee) {
     throw new Error(`not enough confirmed BTC: have ${formatBTC(total)}, need ${formatBTC(amount + fee)} including the fee`);
   }
   change.value = total - amount - fee;
-  if (change.value >= DUST) outputs.push(change);
+  if (change.value >= dust) outputs.push(change);
   else fee += change.value;
   if (fee > MAX_FEE) throw new Error(`the fee would be ${formatBTC(fee)} BTC; refusing to sign`);
 
@@ -463,6 +470,14 @@ export async function planPayment({ key, utxos, getRawTx, script, amount, data, 
     outputs,
   };
   return { tx, inputTotal: total, fee, unsignedHex: hex(serialize(tx)) };
+}
+
+// vmFee is what a BTCVM transaction of size vbytes pays: twice the relay
+// rate, and never less than the relay minimum.
+export function vmFee(size) {
+  const relay = (size * VM_RELAY_PER_KVB) / 1000n || VM_RELAY_PER_KVB;
+  const fee = (size * VM_FEE_PER_KVB + 999n) / 1000n;
+  return fee > relay ? fee : relay;
 }
 
 // signPlan signs a planned payment, and checks the signed transaction pays

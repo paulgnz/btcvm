@@ -68,9 +68,11 @@ const cases = [
   { name: 'to a Taproot address', coins: [D], to: chain.pkScript({ kind: chain.P2TR, hash: sha256(enc.encode('a taproot key')) }), amount: D / 4n },
   { name: 'change below the dust limit goes to the fee', coins: [D / 1000n + 1000n], to: chain.pkScript(keys[1].dest), amount: D / 1000n },
   { name: 'at a high fee rate', coins: [D], to: chain.pkScript(keys[1].dest), amount: D / 2n, feeRate: 80n },
-  // BTCVM payments pay twice the relay minimum.
-  { name: 'BTCVM payment', coins: [3n * D, 5n * D], to: chain.pkScript(keys[1].dest), amount: 6n * D, feeRate: chain.VM_FEE_RATE },
-  { name: 'BTCVM withdrawal', coins: [D / 2n], to: chain.pkScript(reserve), amount: D / 5n, data: chain.pegOutData(keys[2].dest), feeRate: chain.VM_FEE_RATE },
+  // BTCVM payments pay twice the relay minimum (0.02 sat/vB), and can be a
+  // single satoshi.
+  { name: 'BTCVM payment', coins: [3n * D, 5n * D], to: chain.pkScript(keys[1].dest), amount: 6n * D, vm: true },
+  { name: 'BTCVM withdrawal', coins: [D / 2n], to: chain.pkScript(reserve), amount: D / 5n, data: chain.pegOutData(keys[2].dest), vm: true },
+  { name: 'BTCVM payment of one satoshi', coins: [1000n], to: chain.pkScript(keys[1].dest), amount: 1n, vm: true },
 ];
 
 const payments = [];
@@ -80,7 +82,7 @@ for (const [n, c] of cases.entries()) {
   const utxos = c.coins.map((value, vout) => ({ txid: prevTxid, vout, value: String(value), script: chain.hex(fromScript), confirmations: 1 }));
   const built = await chain.buildPayment({
     key: from.key, utxos, getRawTx: async () => chain.hex(raw),
-    script: c.to, amount: c.amount, data: c.data, feeRate: c.feeRate,
+    script: c.to, amount: c.amount, data: c.data, feeRate: c.feeRate, vm: c.vm,
   });
   payments.push({
     name: c.name,
@@ -93,7 +95,7 @@ for (const [n, c] of cases.entries()) {
     tx: built.hex,
     txid: built.txid,
     fee: String(built.fee),
-    feeRate: String(c.feeRate ?? chain.BTC_FEE_RATE),
+    feeRate: c.vm ? 'vm' : String(c.feeRate ?? chain.BTC_FEE_RATE),
   });
 }
 

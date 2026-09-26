@@ -150,6 +150,10 @@ type Policy struct {
 	// considered a non-zero fee.
 	MinRelayTxFee btcutil.Amount
 
+	// DustRelayFee is the fee rate in satoshi/kvB that sets the dust limit
+	// (see IsDust). Zero allows any output of at least one satoshi.
+	DustRelayFee btcutil.Amount
+
 	// RejectReplacement, if true, rejects accepting replacement
 	// transactions using the Replace-By-Fee (RBF) signaling policy into
 	// the mempool.
@@ -1614,7 +1618,7 @@ func (mp *TxPool) validateStandardness(tx *btcutil.Tx, nextBlockHeight int32,
 	// Check the transaction standard.
 	err := CheckTransactionStandard(
 		tx, nextBlockHeight, medianTimePast,
-		mp.cfg.Policy.MinRelayTxFee, mp.cfg.Policy.MaxTxVersion,
+		mp.cfg.Policy.DustRelayFee, mp.cfg.Policy.MaxTxVersion,
 	)
 	if err != nil {
 		// Attempt to extract a reject code from the error so it can be

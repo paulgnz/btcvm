@@ -323,6 +323,7 @@ func newPoolHarness(chainParams *chaincfg.Params) (*poolHarness, []spendableOutp
 				MaxOrphanTxSize:      1000,
 				MaxSigOpCostPerTx:    blockchain.MaxBlockSigOpsCost / 4,
 				MinRelayTxFee:        1000, // 1 Satoshi per byte
+				DustRelayFee:         1000,
 				MaxTxVersion:         1,
 			},
 			ChainParams:      chainParams,

@@ -218,11 +218,12 @@ func TestDust(t *testing.T) {
 		isDust   bool
 	}{
 		{
-			// Any value is allowed with a zero relay fee.
+			// BTCVM: with no dust fee, any output worth at least a
+			// satoshi is allowed, but an empty one is still dust.
 			"zero value with zero relay fee",
 			wire.TxOut{Value: 0, PkScript: pkScript},
 			0,
-			false,
+			true,
 		},
 		{
 			// Zero value is dust with any relay fee"
@@ -506,5 +507,25 @@ func TestCheckTransactionStandard(t *testing.T) {
 				txrerr.RejectCode, test.code)
 			continue
 		}
+	}
+}
+
+// TestNoDustFee checks a zero dust fee rate allows any output worth at
+// least one satoshi, and still refuses empty and unspendable ones.
+func TestNoDustFee(t *testing.T) {
+	p2wpkh := append([]byte{txscript.OP_0, txscript.OP_DATA_20}, make([]byte, 20)...)
+	for _, test := range []struct {
+		value int64
+		dust  bool
+	}{{0, true}, {1, false}, {546, false}} {
+		if got := IsDust(&wire.TxOut{Value: test.value, PkScript: p2wpkh}, 0); got != test.dust {
+			t.Errorf("IsDust(%d sats, no dust fee) = %v, want %v", test.value, got, test.dust)
+		}
+	}
+	if !IsDust(&wire.TxOut{Value: 1000, PkScript: []byte{txscript.OP_RETURN}}, 0) {
+		t.Error("an unspendable output is not dust with no dust fee")
+	}
+	if !IsDust(&wire.TxOut{Value: 1, PkScript: p2wpkh}, 1000) {
+		t.Error("1 satoshi is not dust at the default dust fee")
 	}
 }

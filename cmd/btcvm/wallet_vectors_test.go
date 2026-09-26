@@ -1,11 +1,14 @@
 package main
 
 import (
+	"time"
+
 	"bytes"
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
 	"github.com/MetalBlockchain/btcvm/btcd/chaincfg"
+	"github.com/MetalBlockchain/btcvm/btcd/mempool"
 	"os"
 	"os/exec"
 	"strconv"
@@ -115,9 +118,20 @@ func TestWalletVectors(t *testing.T) {
 		require.Equal(p.Amount, strconv.FormatInt(tx.TxOut[0].Value, 10), p.Name)
 		require.Equal(p.Fee, strconv.FormatInt(in-out, 10), p.Name)
 		// The fee pays at least the rate on the real virtual size.
+		vsize := (blockchain.GetTransactionWeight(btcutil.NewTx(tx)) + 3) / 4
+		if p.FeeRate == "vm" {
+			// BTCVM: at least the relay minimum, with the node's own rules
+			// for dust (a satoshi) and standardness.
+			relay := vsize * 10 / 1000
+			if relay == 0 {
+				relay = 10
+			}
+			require.GreaterOrEqual(in-out, relay, p.Name)
+			require.NoError(mempool.CheckTransactionStandard(btcutil.NewTx(tx), 1, time.Unix(0, 0), 0, 2), p.Name)
+			continue
+		}
 		rate, err := strconv.ParseInt(p.FeeRate, 10, 64)
 		require.NoError(err, p.Name)
-		vsize := (blockchain.GetTransactionWeight(btcutil.NewTx(tx)) + 3) / 4
 		require.GreaterOrEqual(in-out, rate*vsize, p.Name)
 	}
 }

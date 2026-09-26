@@ -871,7 +871,8 @@ async function pay(script, amount, data, beforeBroadcast, network = 'vm', contex
   const plan = await chain.planPayment({
     key, utxos: net.utxos().filter((u) => !inUse.has(`${u.txid}:${u.vout}`)), getRawTx: net.getRawTx,
     script, amount, data,
-    feeRate: network === 'vm' ? chain.VM_FEE_RATE : BigInt(Math.max(info.btcFeeRate || 0, 1)),
+    feeRate: BigInt(Math.max(info.btcFeeRate || 0, 1)),
+    vm: network === 'vm',
   });
   if (!(await review(plan, network, context))) throw cancelled();
   if (gen !== generation || !key) throw new Error('The wallet changed during review, so nothing was sent.');

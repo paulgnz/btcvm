@@ -52,6 +52,7 @@ const (
 	defaultDbType                = "ffldb"
 	defaultTrickleInterval       = peer.DefaultTrickleInterval
 	defaultBlockMinSize          = 0
+	btcvmMinRelayTxFee           = btcutil.Amount(10) // satoshis per kvB
 	defaultBlockMaxSize          = 750000
 	defaultBlockMinWeight        = 0
 	defaultBlockMaxWeight        = 3000000
@@ -132,6 +133,7 @@ type Config struct {
 	MaxPeers             int           `json:"maxPeers"             long:"maxpeers"             description:"Max number of inbound and outbound peers"`
 	MiningAddrs          []string      `json:"miningAddrs"          long:"miningaddr"           description:"Add the specified payment address to the list of addresses to use for generated blocks -- At least one address is required if the generate option is set"`
 	MinRelayTxFee        float64       `json:"minRelayTxFee"        long:"minrelaytxfee"        description:"The minimum transaction fee rate in BTC/kvB every relayed transaction must pay"`
+	DustRelayFee         float64       `json:"dustRelayFee"         long:"dustrelayfee"         description:"The fee rate in BTC/kvB that sets the dust limit; 0 allows any output of at least 1 satoshi (default: the minrelaytxfee)"`
 	DisableBanning       bool          `json:"disableBanning"       long:"nobanning"            description:"Disable banning of misbehaving peers"`
 	NoCFilters           bool          `json:"noCFilters"           long:"nocfilters"           description:"Disable committed filtering (CF) support"`
 	DisableCheckpoints   bool          `json:"disableCheckpoints"   long:"nocheckpoints"        description:"Disable built-in checkpoints.  Don't do this unless you know what you're doing."`
@@ -189,6 +191,7 @@ type Config struct {
 	addCheckpoints       []chaincfg.Checkpoint
 	miningAddrs          []btcutil.Address
 	minRelayTxFee        btcutil.Amount
+	dustRelayFee         btcutil.Amount
 	whitelists           []*net.IPNet
 }
 
@@ -474,19 +477,23 @@ func LoadConfig(nodeId string, overrideCfg *Config) (*Config, []string, error) {
 		DbType:               defaultDbType,
 		RPCKey:               defaultRPCKeyFile,
 		RPCCert:              defaultRPCCertFile,
-		MinRelayTxFee:        mempool.DefaultMinRelayTxFee.ToBTC(),
-		TrickleInterval:      defaultTrickleInterval,
-		BlockMinSize:         defaultBlockMinSize,
-		BlockMaxSize:         defaultBlockMaxSize,
-		BlockMinWeight:       defaultBlockMinWeight,
-		BlockMaxWeight:       defaultBlockMaxWeight,
-		BlockPrioritySize:    mempool.DefaultBlockPrioritySize,
-		MaxOrphanTxs:         defaultMaxOrphanTransactions,
-		SigCacheMaxSize:      defaultSigCacheMaxSize,
-		UtxoCacheMaxSizeMiB:  defaultUtxoCacheMaxSizeMiB,
-		Generate:             defaultGenerate,
-		TxIndex:              defaultTxIndex,
-		AddrIndex:            defaultAddrIndex,
+		// BTCVM has no miners to pay: a hundredth of Bitcoin Core's relay
+		// fee (0.01 sat/vB, about a satoshi for a payment) still prices
+		// spam, and any output of a satoshi or more relays.
+		MinRelayTxFee:       btcvmMinRelayTxFee.ToBTC(),
+		DustRelayFee:        0,
+		TrickleInterval:     defaultTrickleInterval,
+		BlockMinSize:        defaultBlockMinSize,
+		BlockMaxSize:        defaultBlockMaxSize,
+		BlockMinWeight:      defaultBlockMinWeight,
+		BlockMaxWeight:      defaultBlockMaxWeight,
+		BlockPrioritySize:   mempool.DefaultBlockPrioritySize,
+		MaxOrphanTxs:        defaultMaxOrphanTransactions,
+		SigCacheMaxSize:     defaultSigCacheMaxSize,
+		UtxoCacheMaxSizeMiB: defaultUtxoCacheMaxSizeMiB,
+		Generate:            defaultGenerate,
+		TxIndex:             defaultTxIndex,
+		AddrIndex:           defaultAddrIndex,
 	}
 
 	// Merge override config if provided
@@ -840,6 +847,19 @@ func LoadConfig(nodeId string, overrideCfg *Config) (*Config, []string, error) {
 		fmt.Fprintln(os.Stderr, err)
 		fmt.Fprintln(os.Stderr, usageMessage)
 		return nil, nil, err
+	}
+
+	// Validate the dustrelayfee; unset, it follows the minrelaytxfee.
+	cfg.dustRelayFee = cfg.minRelayTxFee
+	if cfg.DustRelayFee >= 0 {
+		cfg.dustRelayFee, err = btcutil.NewAmount(cfg.DustRelayFee)
+		if err != nil {
+			str := "%s: invalid dustrelayfee: %v"
+			err := fmt.Errorf(str, funcName, err)
+			fmt.Fprintln(os.Stderr, err)
+			fmt.Fprintln(os.Stderr, usageMessage)
+			return nil, nil, err
+		}
 	}
 
 	// Limit the max block size to a sane value.

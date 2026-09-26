@@ -14,7 +14,7 @@ const pay = (utxo, rawTxs) => chain.buildPayment({
   script: chain.unhex(input.toScript),
   amount: BigInt(input.amount),
   data: input.data ? chain.unhex(input.data) : undefined,
-  feeRate: chain.VM_FEE_RATE,
+  vm: true,
 });
 const payment = await pay(input.utxo, input.rawTxs);
 

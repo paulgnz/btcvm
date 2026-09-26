@@ -260,6 +260,11 @@ func IsDust(txOut *wire.TxOut, minRelayTxFee btcutil.Amount) bool {
 		return true
 	}
 
+	// With no dust fee rate, any output worth something relays.
+	if minRelayTxFee == 0 {
+		return txOut.Value < 1
+	}
+
 	// The output is considered dust if the cost to the network to spend the
 	// coins is more than 1/3 of the minimum free transaction relay fee.
 	// minFreeTxRelayFee is in Satoshi/KB, so multiply by 1000 to
