@@ -616,7 +616,7 @@ func registerDeposit(b *bridge, dest destination) (btcutil.Address, error) {
 			wg.Add(1)
 			go func(r *remoteSigner) {
 				defer wg.Done()
-				if err := r.register(dest); err != nil {
+				if err := r.register(dest, nil); err != nil {
 					b.logf("telling signer %s about deposit address %s: %v", r.URL, addr.EncodeAddress(), err)
 				}
 			}(r)

@@ -316,10 +316,96 @@ func (r *remoteSigner) sign(p *proposal, set *signerSet) (int, [][]byte, error) 
 	return index, sigs, nil
 }
 
-// register tells the signer about a new personal deposit address, so its
-// Bitcoin node watches it before anything is sent there.
-func (r *remoteSigner) register(d destination) error {
-	return r.post("/v1/register", map[string]string{"destination": encodeDest(d)}, nil)
+// register tells the signer about a personal deposit address, so its
+// Bitcoin node watches it. blocks names the block of each payment already
+// made to it (txid -> block hash), so a signer told late imports them from
+// its own node.
+func (r *remoteSigner) register(d destination, blocks map[string]string) error {
+	return r.post("/v1/register", registerRequest{Destination: encodeDest(d), Blocks: blocks}, nil)
+}
+
+type registerRequest struct {
+	Destination string            `json:"destination"`
+	Blocks      map[string]string `json:"blocks,omitempty"`
+}
+
+// maxRegisterBlocks bounds the payments one registration names.
+const maxRegisterBlocks = 64
+
+// syncSigners makes sure every signer watches every registered deposit
+// address, with the payments already made to it. The web server records
+// registrations but can't reach the signers, and a signer only learns an
+// address from a proposal it is asked to sign: with 2 of 3 signing, the
+// third may never be asked, and would then see less BTC locked than the
+// others and refuse everything as insolvent.
+func (b *bridge) syncSigners() {
+	if len(b.cosigners) == 0 || b.registry == nil {
+		return
+	}
+	dests, err := b.registry.list()
+	if err != nil {
+		b.logf("reading the deposit registry: %v", err)
+		return
+	}
+	if b.told == nil {
+		b.told = map[string]map[string]bool{}
+	}
+	hints := map[string]map[string]string{}
+	for _, r := range b.cosigners {
+		told := b.told[r.URL]
+		if told == nil {
+			told = map[string]bool{}
+			b.told[r.URL] = told
+		}
+		for _, d := range dests {
+			key := encodeDest(d)
+			if told[key] {
+				continue
+			}
+			blocks, ok := hints[key]
+			if !ok {
+				blocks = b.paymentBlocks(d)
+				hints[key] = blocks
+			}
+			if err := r.register(d, blocks); err != nil {
+				b.logf("telling signer %s about deposit destination %s: %v", r.URL, key, err)
+				break // try this signer again next pass
+			}
+			told[key] = true
+		}
+	}
+}
+
+// paymentBlocks names the block of each confirmed payment the coordinator's
+// wallet has seen to d's deposit address.
+func (b *bridge) paymentBlocks(d destination) map[string]string {
+	c, ok := b.btc.(*btcChain)
+	if !ok {
+		return nil
+	}
+	addr, err := b.signers.depositAddress(d, b.btcParams)
+	if err != nil {
+		return nil
+	}
+	var received []struct {
+		TxIDs []string `json:"txids"`
+	}
+	if err := c.rpc.call(&received, "listreceivedbyaddress", 1, false, true, addr.EncodeAddress()); err != nil {
+		b.logf("payments to %s: %v", addr.EncodeAddress(), err)
+		return nil
+	}
+	blocks := map[string]string{}
+	for _, r := range received {
+		for _, id := range r.TxIDs {
+			if len(blocks) == maxRegisterBlocks {
+				return blocks
+			}
+			if h, err := c.blockOf(id); err == nil && h != "" {
+				blocks[id] = h
+			}
+		}
+	}
+	return blocks
 }
 
 // --- signer --------------------------------------------------------------------
@@ -414,11 +500,12 @@ func (c *cosigner) authed(fn func(*http.Request) (any, error)) http.HandlerFunc 
 }
 
 func (c *cosigner) handleRegister(r *http.Request) (any, error) {
-	var body struct {
-		Destination string `json:"destination"`
-	}
+	var body registerRequest
 	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
 		return nil, err
+	}
+	if len(body.Blocks) > maxRegisterBlocks {
+		return nil, fmt.Errorf("a registration names at most %d payments", maxRegisterBlocks)
 	}
 	d, err := parseDest(body.Destination)
 	if err != nil {
@@ -427,6 +514,19 @@ func (c *cosigner) handleRegister(r *http.Request) (any, error) {
 	addr, err := registerDeposit(c.b, d)
 	if err != nil {
 		return nil, err
+	}
+	// Payments already made to it: this signer's own node checks each hint
+	// (importTx proves the transaction is in that block); a wrong one fails.
+	if dc, ok := c.b.btc.(*btcChain); ok {
+		for id, block := range body.Blocks {
+			txid, err := chainhash.NewHashFromStr(id)
+			if err != nil {
+				return nil, err
+			}
+			if err := dc.importTx(*txid, block); err != nil {
+				c.b.logf("could not import %v, paid to %s, from this signer's Bitcoin node: %v", txid, addr.EncodeAddress(), err)
+			}
+		}
 	}
 	return map[string]string{"depositAddress": addr.EncodeAddress()}, nil
 }

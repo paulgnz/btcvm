@@ -30,8 +30,11 @@ type bridge struct {
 	signers *signerSet
 	// cosigners are remote signers, each holding one key, asked to sign
 	// what this process cannot sign with the keys in signers.
-	cosigners          []*remoteSigner
-	cosignersPath      string
+	cosigners     []*remoteSigner
+	cosignersPath string
+	// told records, per signer URL, the deposit destinations that signer
+	// has confirmed it watches (see syncSigners).
+	told               map[string]map[string]bool
 	coordinatorKeyPath string
 	flags              *flag.FlagSet    // the policy flags, if from bridgeFlags
 	registry           *depositRegistry // personal deposit addresses; may be nil
@@ -456,6 +459,7 @@ func (b *bridge) step() (string, error) {
 	if a := b.audit(s); !a.solvent() {
 		return "", fmt.Errorf("%w (%+v)", errInsolvent, a)
 	}
+	b.syncSigners()
 
 	var failed error
 	// Releases chain off each other's reserve change, so wait for the

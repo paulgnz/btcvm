@@ -457,6 +457,68 @@ func TestLateSignerKnowsPayoutByWitness(t *testing.T) {
 	require.ErrorContains(err, "already done in "+payment.String())
 }
 
+// TestSignerToldAboutEarlierDeposits reproduces the first mainnet deposits:
+// with 2 of 3 signing, the third signer is never asked about the first
+// deposit, so never watches its address. When a second deposit comes, it
+// must still see the first one locked, or it counts less locked than
+// circulating and refuses everything as insolvent.
+func TestSignerToldAboutEarlierDeposits(t *testing.T) {
+	require := require.New(t)
+	n := startRegtest(t)
+	h := newCosignHarness(t)
+	wallet := func(name string) *btcChain {
+		s := n.settings
+		s.btcWallet = name
+		c := &btcChain{rpc: s.btcRPCClient()}
+		require.NoError(c.ensureWallet())
+		return c
+	}
+	setup := func(b *bridge, c *btcChain) {
+		b.btc, b.btcParams = c, &chaincfg.RegressionNetParams
+		b.minFeeRate, b.maxFeeRate = 1, 100
+		b.minDeposit, b.minPegOut = 10_000, 30_000
+	}
+	setup(h.b, wallet("btcvm"))
+	h.b.feeRate = func() (int64, error) { return 3, nil }
+	for i, c := range h.signers {
+		setup(c.b, wallet(fmt.Sprintf("signer%d", i)))
+		require.NoError(watchPeg(c.b, false))
+	}
+	require.NoError(watchPeg(h.b, false))
+
+	// The web server registers Alice's address; it can't reach the
+	// signers. Signer 2 is not asked about her deposit.
+	all := h.b.cosigners
+	h.b.cosigners = nil
+	alice := h.user(1)
+	first, err := registerDeposit(h.b, alice)
+	require.NoError(err)
+	h.b.cosigners = all[:2]
+	require.NoError(n.funder.call(nil, "sendtoaddress", first.EncodeAddress(), 0.25))
+	n.mine(6)
+	require.NotEmpty(h.step())
+	h.vm.mine()
+
+	// Bob deposits; now every signer is reachable.
+	h.b.cosigners = nil
+	bob := h.user(2)
+	second, err := registerDeposit(h.b, bob)
+	require.NoError(err)
+	h.b.cosigners = all
+	require.NoError(n.funder.call(nil, "sendtoaddress", second.EncodeAddress(), 0.1))
+	n.mine(6)
+	require.NotEmpty(h.step(), "Bob's deposit is credited")
+	h.vm.mine()
+
+	for i, c := range h.signers {
+		s, err := c.b.load()
+		require.NoError(err)
+		a := c.b.audit(s)
+		require.True(a.solvent(), "signer %d: %+v", i, a)
+		require.Equal(int64(btc/4+btc/10), a.Locked, "signer %d sees both deposits locked", i)
+	}
+}
+
 // TestFailedImportIsRetried: when the wallet can't import a new deposit
 // address, the registration is recorded but the next request imports it,
 // rather than leaving it recorded and unwatched.
