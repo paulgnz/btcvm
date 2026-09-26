@@ -19,9 +19,10 @@ export function confirmationsFor(info, value) {
 
 // describeTiers says how long deposits wait, for example "2 confirmations
 // for up to 0.001 BTC, 3 for up to 0.005 BTC, and 6 for anything larger".
-export function describeTiers(info) {
+// show formats a tier's BTC amount, for the wallet's chosen unit.
+export function describeTiers(info, show = (btc) => `${plain(btc)} BTC`) {
   const tiers = info.confirmationTiers || [];
   if (tiers.length === 0) return plural(info.depositConfirmations);
-  const parts = tiers.map((t, i) => `${i === 0 ? plural(t.confirmations) : t.confirmations} for up to ${plain(t.upTo)} BTC`);
+  const parts = tiers.map((t, i) => `${i === 0 ? plural(t.confirmations) : t.confirmations} for up to ${show(t.upTo)}`);
   return `${parts.join(', ')}, and ${info.depositConfirmations} for anything larger`;
 }

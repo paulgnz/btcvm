@@ -1,5 +1,6 @@
 import * as chain from './chain.js';
 import * as passkey from './passkey.js';
+import * as units from './units.js';
 import { confirmationsFor, describeTiers } from './tiers.js';
 
 const $ = (id) => document.getElementById(id);
@@ -7,6 +8,7 @@ const KEY_STORE = 'btcvm.key';
 const PASSKEY_STORE = 'btcvm.key.passkey'; // the key, encrypted to a passkey
 const WITHDRAW_STORE = 'btcvm.withdrawals';
 const SETUP_STORE = 'btcvm.setup'; // per address: {backedUp, hidden}
+const UNIT_STORE = 'btcvm.unit'; // btc | sats | usd
 
 let info = null;
 let key = null; // Uint8Array, or null
@@ -56,8 +58,28 @@ async function api(path, body) {
   return data;
 }
 
-// API amounts are BTC decimal strings with 8 places; show them tidily.
-const tidy = (s) => chain.formatBTC(chain.parseBTC(String(s).replace('-', '')));
+// --- units ---------------------------------------------------------------------
+
+// Amounts show in the unit the viewer picks: BTC, sats or US dollars. Only
+// what is shown and typed changes; payments are always exact satoshis.
+let unit = units.UNITS.includes(store.get(UNIT_STORE)) ? store.get(UNIT_STORE) : 'btc';
+let price = null; // {usd, time}: dollars per BTC, and when it was fetched
+
+// usdPrice is the price if it may be used: fetched in the last 10 minutes,
+// and only on mainnet, where BTC has a price.
+const usdPrice = () => (info && info.bitcoinNetwork === 'mainnet' ? units.freshPrice(price) : null);
+// shownUnit is the unit amounts show in: the one picked, or BTC while there
+// is no dollar price.
+const shownUnit = () => (unit === 'usd' && !usdPrice() ? 'btc' : unit);
+
+// API amounts are BTC decimal strings with 8 places.
+const sats = (s) => chain.parseBTC(String(s).replace('-', '').replace(/,/g, ''));
+const showSats = (n) => units.format(n, shownUnit(), usdPrice());
+const show = (s) => showSats(sats(s));
+// showExact is for what is about to be signed: in dollars it gives the
+// exact BTC too.
+const showExact = (n) => (shownUnit() === 'usd'
+  ? `${units.format(n, 'btc')} (≈ ${units.format(n, 'usd', usdPrice())})` : showSats(n));
 const short = (txid) => `${txid.slice(0, 10)}…${txid.slice(-6)}`;
 
 function showResult(el, message, ok, txid, network = 'vm') {
@@ -149,11 +171,6 @@ document.addEventListener('click', async (e) => {
 
 async function loadInfo() {
   info = await api('/api/info');
-  $('confs-needed-top').textContent = describeTiers(info);
-  $('vm-fee').textContent = tidy(info.vmFee);
-  $('min-deposit').textContent = tidy(info.minDeposit);
-  $('btc-fee').textContent = tidy(info.payoutFee);
-  $('min-pegout').textContent = tidy(info.minPegOut);
   $('signers').textContent =
     `Held by ${info.signers.required} of ${info.signers.publicKeys.length} signers. Peg address on Bitcoin: ${info.pegAddress}`;
   const mainnet = info.bitcoinNetwork === 'mainnet';
@@ -167,15 +184,40 @@ async function loadInfo() {
     $('network-name').textContent = 'testnet';
     band.textContent = 'Testnet. These coins have no value, and the network may be reset at any time.';
   }
+  if (info.faucet.enabled) $('tab-faucet').hidden = false;
+  renderInfo();
+}
+
+// renderInfo shows the bridge's fees and limits, in the unit picked.
+function renderInfo() {
+  $('confs-needed-top').textContent = describeTiers(info, show);
+  $('vm-fee').textContent = show(info.vmFee);
+  $('min-deposit').textContent = show(info.minDeposit);
+  $('btc-fee').textContent = show(info.payoutFee);
+  $('min-pegout').textContent = show(info.minPegOut);
   const limits = [];
-  if (chain.parseBTC(info.maxDeposit) > 0n) limits.push(`Deposits over ${tidy(info.maxDeposit)} BTC are not credited; they are held for a refund.`);
-  if (chain.parseBTC(info.maxCirculating) > 0n) limits.push(`At most ${tidy(info.maxCirculating)} BTC can be on BTCVM in total during the beta.`);
+  if (chain.parseBTC(info.maxDeposit) > 0n) limits.push(`Deposits over ${show(info.maxDeposit)} are not credited; they are held for a refund.`);
+  if (chain.parseBTC(info.maxCirculating) > 0n) limits.push(`At most ${show(info.maxCirculating)} can be on BTCVM in total during the beta.`);
   $('deposit-limits').textContent = limits.length ? ' ' + limits.join(' ') : '';
   if (info.faucet.enabled) {
-    $('tab-faucet').hidden = false;
     $('faucet-text').textContent =
-      `The faucet sends ${tidy(info.faucet.amount)} BTC straight to your BTCVM address, once a day.`;
+      `The faucet sends ${show(info.faucet.amount)} straight to your BTCVM address, once a day.`;
   }
+}
+
+// The peg's figures as last loaded, to redraw in another unit.
+let lastAudit = null;
+
+function renderPeg() {
+  const a = lastAudit;
+  if (!a) return;
+  $('peg-capacity').textContent = sats(info.maxCirculating) > 0n
+    ? `Beta capacity: ${show(a.circulating)} of ${show(info.maxCirculating)} in use.`
+    : '';
+  $('locked').textContent = show(a.locked);
+  $('circulating').textContent = show(a.circulating);
+  $('pending-in').textContent = show(a.pendingPegIns);
+  $('pending-out').textContent = show(a.pendingPegOuts);
 }
 
 async function refreshStatus() {
@@ -234,16 +276,11 @@ async function refreshStatus() {
     const cap = chain.parseBTC(info.maxCirculating);
     let max = locked > circulating ? locked : circulating;
     if (cap > max) max = cap;
-    $('peg-capacity').textContent = cap > 0n
-      ? `Beta capacity: ${tidy(a.circulating)} of ${tidy(info.maxCirculating)} BTC in use.`
-      : '';
     const pct = (v) => (max === 0n ? 0 : Number((v * 1000n) / max) / 10);
-    $('locked').textContent = tidy(a.locked);
-    $('circulating').textContent = tidy(a.circulating);
     $('locked-fill').style.width = `${pct(locked)}%`;
     $('circulating-fill').style.width = `${pct(circulating)}%`;
-    $('pending-in').textContent = tidy(a.pendingPegIns);
-    $('pending-out').textContent = tidy(a.pendingPegOuts);
+    lastAudit = a;
+    renderPeg();
     // Bitcoin's supply, from the bridge's own node, once it has caught up.
     const supply = s.bitcoinSupply;
     $('btc-supply').hidden = !supply;
@@ -299,6 +336,8 @@ function setKey(newKey, mode = 'store') {
   $('inflight').hidden = true;
   vmBalance = null;
   btcBalance = null;
+  lastVm = null;
+  lastBTC = null;
   depositShownFor = null;
   let warning = '';
   if (key && mode === 'store') {
@@ -318,9 +357,11 @@ function setKey(newKey, mode = 'store') {
   hideSecrets();
   $('key-details').open = false;
   $('balance').textContent = '…';
+  $('balance-unit').textContent = 'BTC';
   $('balance-pending').textContent = '';
   $('history').replaceChildren();
   $('btc-balance').textContent = '…';
+  $('btc-balance-unit').textContent = 'BTC';
   $('btc-pending').textContent = '';
   $('btc-history').replaceChildren();
   $('btc-import').hidden = true;
@@ -386,10 +427,8 @@ async function refreshWallet() {
     const a = await api(`/api/address/${myAddress()}`);
     if (gen !== generation) return;
     utxos = a.utxos;
-    $('balance').textContent = tidy(a.confirmed);
-    const pending = chain.parseBTC(a.pending);
-    $('balance-pending').textContent = pending > 0n ? `${tidy(a.pending)} BTC arriving in the next block` : '';
-    renderHistory($('history'), a.history, 'Nothing yet. Move BTC over from Bitcoin on the Deposit tab.');
+    lastVm = a;
+    renderVmWallet();
     settleOutgoing('vm', a.history);
     vmBalance = a.confirmed;
     renderAvailable();
@@ -397,9 +436,31 @@ async function refreshWallet() {
     renderSetup();
   } catch (err) {
     if (gen !== generation) return;
+    lastVm = null;
     $('balance').textContent = '…';
+    $('balance-unit').textContent = 'BTC';
     $('balance-pending').textContent = `Can't load your balance: ${err.message}`;
   }
+}
+
+// The wallet's balances as last loaded, to redraw in another unit.
+let lastVm = null;
+let lastBTC = null;
+
+// showBalance fills a balance: its figure large, its unit small.
+function showBalance(id, amount) {
+  const p = units.parts(sats(amount), shownUnit(), usdPrice());
+  $(id).textContent = p.value;
+  $(`${id}-unit`).textContent = p.unit;
+}
+
+function renderVmWallet() {
+  const a = lastVm;
+  if (!a) return;
+  showBalance('balance', a.confirmed);
+  const pending = chain.parseBTC(a.pending);
+  $('balance-pending').textContent = pending > 0n ? `${show(a.pending)} arriving in the next block` : '';
+  renderHistory($('history'), a.history, 'Nothing yet. Move BTC over from Bitcoin on the Deposit tab.');
 }
 
 function renderHistory(list, history, emptyText) {
@@ -409,7 +470,7 @@ function renderHistory(list, history, emptyText) {
       const sent = h.net.startsWith('-');
       return item(
         { text: short(h.txid), class: 'mono' },
-        `${sent ? '−' : '+'}${tidy(h.net)} BTC${h.confirmations > 0 ? '' : ' (pending)'}`,
+        `${sent ? '−' : '+'}${show(h.net)}${h.confirmations > 0 ? '' : ' (pending)'}`,
       );
     })));
 }
@@ -441,7 +502,7 @@ function renderAvailable() {
       value.textContent = note;
     } else {
       value.className = 'available-amount amount';
-      value.textContent = `${tidy(balance)} BTC`;
+      value.textContent = `${show(balance)}`;
     }
     el.replaceChildren(label, value);
   };
@@ -456,6 +517,7 @@ for (const radio of document.querySelectorAll('input[name=send-network]')) radio
 async function refreshBTCWallet() {
   if (!key || !info.btcWallet) {
     $('btc-balance').textContent = '–';
+    $('btc-balance-unit').textContent = 'BTC';
     $('btc-pending').textContent = 'Not available from this bridge.';
     btcState = 'off';
     setBTCReady(false, "This bridge doesn't serve Bitcoin balances.");
@@ -476,23 +538,18 @@ async function refreshBTCWallet() {
     btcState = 'ready';
     setBTCReady(true);
     btcUtxos = a.utxos;
-    $('btc-balance').textContent = tidy(a.confirmed);
-    const pending = chain.parseBTC(a.pending.replace('-', ''));
     settleOutgoing('btc', a.history);
-    const change = outgoing().filter((o) => o.network === 'btc').reduce((n, o) => n + BigInt(o.change), 0n);
-    $('btc-pending').textContent = pending === 0n ? ''
-      : a.pending.startsWith('-')
-        ? `${tidy(a.pending)} BTC leaving${change > 0n ? `; ${chain.formatBTC(change)} BTC change comes back` : ''} when it confirms, usually within about 10 minutes.`
-        : `${tidy(a.pending)} BTC arriving, waiting for a block.`;
-    renderHistory($('btc-history'), a.history, 'Nothing yet. Send BTC to your address from any Bitcoin wallet.');
+    lastBTC = a;
+    renderBTCWallet();
     btcBalance = a.confirmed;
     renderAvailable();
     seenBTC = a.history.length > 0 || chain.parseBTC(a.confirmed) > 0n;
     renderSetup();
     $('btc-import').hidden = false;
-    $('move-available').textContent = `Available on Bitcoin: ${tidy(a.confirmed)} BTC.`;
   } catch (err) {
     if (gen !== generation) return;
+    lastBTC = null;
+    $('btc-balance-unit').textContent = 'BTC';
     btcState = err.status === 503 ? 'syncing' : 'unknown';
     setBTCReady(false, "Available once the bridge's Bitcoin node has caught up.");
     $('btc-balance').textContent = '…';
@@ -524,6 +581,20 @@ $('btc-import-form').addEventListener('submit', async (e) => {
     button.disabled = false;
   }
 });
+
+function renderBTCWallet() {
+  const a = lastBTC;
+  if (!a) return;
+  showBalance('btc-balance', a.confirmed);
+  const pending = chain.parseBTC(a.pending.replace('-', ''));
+  const change = outgoing().filter((o) => o.network === 'btc').reduce((n, o) => n + BigInt(o.change), 0n);
+  $('btc-pending').textContent = pending === 0n ? ''
+    : a.pending.startsWith('-')
+      ? `${show(a.pending)} leaving${change > 0n ? `; ${showSats(change)} change comes back` : ''} when it confirms, usually within about 10 minutes.`
+      : `${show(a.pending)} arriving, waiting for a block.`;
+  renderHistory($('btc-history'), a.history, 'Nothing yet. Send BTC to your address from any Bitcoin wallet.');
+  $('move-available').textContent = `Available on Bitcoin: ${show(a.confirmed)}.`;
+}
 
 // --- setup checklist -------------------------------------------------------------
 
@@ -759,7 +830,7 @@ function reviewLine(label, address, value, note, cls) {
     li.append(n);
   };
   add('span', 'review-label', label);
-  add('span', 'review-amount', value === null ? '' : `${chain.formatBTC(value)} BTC`);
+  add('span', 'review-amount', value === null ? '' : showExact(value));
   if (address) add('span', 'review-address', address);
   if (note) add('p', 'review-note', note);
   return li;
@@ -792,11 +863,11 @@ function review(plan, network, context = {}) {
     } else if (o.address && o.address === context.reserve) {
       const gets = o.value - chain.parseBTC(info.payoutFee);
       lines.push(reviewLine('To the bridge, to withdraw', o.address, o.value,
-        `You receive about ${chain.formatBTC(gets > 0n ? gets : 0n)} BTC on Bitcoin, after a network fee of about ${tidy(info.payoutFee)} BTC at today's rate (${info.btcFeeRate} sat/vB). The exact fee is set when the bridge pays.`));
+        `You receive about ${showSats(gets > 0n ? gets : 0n)} on Bitcoin, after a network fee of about ${show(info.payoutFee)} at today's rate (${info.btcFeeRate} sat/vB). The exact fee is set when the bridge pays.`));
     } else if (o.address && o.address === context.deposit) {
       const gets = o.value - chain.parseBTC(info.vmFee);
       lines.push(reviewLine('To your deposit address', o.address, o.value,
-        `Credited as ${chain.formatBTC(gets > 0n ? gets : 0n)} BTC on BTCVM after ${confirmationsFor(info, o.value)} Bitcoin confirmation${confirmationsFor(info, o.value) === 1 ? '' : 's'}, less the ${tidy(info.vmFee)} BTC bridge fee.`));
+        `Credited as ${showSats(gets > 0n ? gets : 0n)} on BTCVM after ${confirmationsFor(info, o.value)} Bitcoin confirmation${confirmationsFor(info, o.value) === 1 ? '' : 's'}, less the ${show(info.vmFee)} bridge fee.`));
     } else if (o.address) {
       lines.push(reviewLine('To', o.address, o.value));
     } else {
@@ -1025,18 +1096,19 @@ function renderInflight() {
 
   for (const d of lastDeposits) {
     if (['credited', 'refunded'].includes(d.status)) continue;
-    const gets = chain.formatBTC(chain.parseBTC(d.amount) - chain.parseBTC(info.vmFee));
-    const title = `Moving ${tidy(d.amount)} BTC to BTCVM`;
+    const credit = sats(d.amount) - sats(info.vmFee);
+    const gets = showSats(credit > 0n ? credit : 0n);
+    const title = `Moving ${show(d.amount)} to BTCVM`;
     if (d.status === 'held') {
       cards.push(card(title, null, `Held for a refund: ${d.reason}`, 'held'));
     } else if (d.status === 'crediting' || d.confirmations >= d.required) {
-      cards.push(card(title, blocks(`${d.txid}:${d.vout}`, d.required, d.required), `Confirmed. Crediting ${gets} BTC now.`));
+      cards.push(card(title, blocks(`${d.txid}:${d.vout}`, d.required, d.required), `Confirmed. Crediting ${gets} now.`));
     } else if (d.status === 'waiting_for_capacity') {
       cards.push(card(title, null, 'Confirmed, and waiting for room under the beta limit.'));
     } else {
       const left = d.required - d.confirmations;
       cards.push(btcWaiting(card(title, blocks(`${d.txid}:${d.vout}`, d.confirmations, d.required),
-        `${d.confirmations} of ${d.required} confirmations. ${minutes(left)[0].toUpperCase()}${minutes(left).slice(1)} left, then ${gets} BTC arrives.`)));
+        `${d.confirmations} of ${d.required} confirmations. ${minutes(left)[0].toUpperCase()}${minutes(left).slice(1)} left, then ${gets} arrives.`)));
     }
   }
 
@@ -1045,9 +1117,9 @@ function renderInflight() {
     if (!p || p.paymentConfirmations > 0) continue;
     const final = p.status === 'pending' || p.status === 'paid';
     const paid = p.status === 'paid';
-    const detail = paid ? `${tidy(p.pays)} BTC is on its way; it confirms in the next Bitcoin block, usually within about 10 minutes. If fees rise and it waits half an hour, the bridge resends it with a higher fee.`
+    const detail = paid ? `${show(p.pays)} is on its way; it confirms in the next Bitcoin block, usually within about 10 minutes. If fees rise and it waits half an hour, the bridge resends it with a higher fee.`
       : final ? 'The bridge pays it within seconds.' : 'Waiting for it to be final on BTCVM, a few seconds.';
-    const c = card(`Withdrawing ${w.amount} BTC to Bitcoin`,
+    const c = card(`Withdrawing ${show(w.amount)} to Bitcoin`,
       steps([['Final on BTCVM', final], ['Paid on Bitcoin', paid], ['In a Bitcoin block', false]]), detail);
     cards.push(paid ? btcWaiting(c) : c);
   }
@@ -1056,9 +1128,9 @@ function renderInflight() {
     if (o.network !== 'btc' || o.kind === 'withdraw') continue;
     if (o.kind === 'move' && depositTxids.has(o.txid)) continue; // the deposit card covers it
     const change = BigInt(o.change);
-    const back = change > 0n ? ` ${chain.formatBTC(change)} BTC change comes back when it confirms.` : '';
-    const title = o.kind === 'move' ? `Moving ${chain.formatBTC(BigInt(o.amount))} BTC to BTCVM`
-      : `Sending ${chain.formatBTC(BigInt(o.amount))} BTC on Bitcoin`;
+    const back = change > 0n ? ` ${showSats(change)} change comes back when it confirms.` : '';
+    const title = o.kind === 'move' ? `Moving ${showSats(BigInt(o.amount))} to BTCVM`
+      : `Sending ${showSats(BigInt(o.amount))} on Bitcoin`;
     cards.push(btcWaiting(card(title, steps([['Sent', true], ['In a Bitcoin block', false]]),
       `Waiting for a Bitcoin block, usually within about 10 minutes.${back}`)));
   }
@@ -1088,13 +1160,13 @@ $('send-form').addEventListener('submit', async (e) => {
     const network = document.querySelector('input[name=send-network]:checked').value;
     const versions = network === 'btc' ? info.bitcoinVersions : info.btcvmVersions;
     const to = chain.decodeAddress($('send-to').value, versions);
-    const amount = chain.parseBTC($('send-amount').value);
+    const amount = readAmount('send-amount');
     const { txid, unknown } = await pay(chain.pkScript(to), amount, undefined, undefined, network);
     const where = network === 'btc' ? 'on Bitcoin' : 'on BTCVM';
     if (unknown) showResult($('send-result'), unknownOutcome, false, txid, network);
     else showResult($('send-result'), `Sent ${where}. Transaction:`, true, txid, network);
     $('send-to').value = '';
-    $('send-amount').value = '';
+    resetAmount('send-amount');
   } catch (err) {
     showFailure($('send-result'), err);
   } finally {
@@ -1150,12 +1222,12 @@ $('move-form').addEventListener('submit', async (e) => {
   const button = e.submitter;
   button.disabled = true;
   try {
-    const amount = chain.parseBTC($('move-amount').value);
+    const amount = readAmount('move-amount');
     const min = chain.parseBTC(info.minDeposit);
     const max = chain.parseBTC(info.maxDeposit);
-    if (amount < min) throw new Error(`The smallest deposit is ${tidy(info.minDeposit)} BTC.`);
+    if (amount < min) throw new Error(`The smallest deposit is ${show(info.minDeposit)}.`);
     if (max > 0n && amount > max) {
-      throw new Error(`During the beta a deposit can be at most ${tidy(info.maxDeposit)} BTC; a larger one is held for a refund.`);
+      throw new Error(`During the beta a deposit can be at most ${show(info.maxDeposit)}; a larger one is held for a refund.`);
     }
     if (depositShownFor !== myAddress()) await showDeposit();
     if (depositShownFor !== myAddress()) throw new Error("Your deposit address couldn't be checked, so nothing was sent. See below.");
@@ -1169,7 +1241,7 @@ $('move-form').addEventListener('submit', async (e) => {
       showResult($('move-result'),
         `Sent to your deposit address. It's credited on BTCVM after ${n} Bitcoin confirmation${n === 1 ? '' : 's'}, ${minutes(n)}. Transaction:`, true, txid, 'btc');
     }
-    $('move-amount').value = '';
+    resetAmount('move-amount');
     setTimeout(refreshDeposits, 3000);
   } catch (err) {
     showFailure($('move-result'), err);
@@ -1180,7 +1252,7 @@ $('move-form').addEventListener('submit', async (e) => {
 
 function depositStatus(d) {
   switch (d.status) {
-    case 'credited': return { text: `Credited ${tidy(d.credited)} BTC`, class: 'status-done' };
+    case 'credited': return { text: `Credited ${show(d.credited)}`, class: 'status-done' };
     case 'refunded': return { text: 'Refunded on Bitcoin', class: 'status-done' };
     case 'held': return { text: `Held for a refund: ${d.reason}`, class: 'status-held' };
     case 'waiting_for_capacity': return { text: 'Confirmed; waiting for room under the beta limit', class: 'status-waiting' };
@@ -1199,7 +1271,7 @@ async function refreshDeposits() {
     renderInflight();
     $('deposits').replaceChildren(...(deposits.length === 0
       ? [empty('No deposits yet. They show up here once Bitcoin sees them.')]
-      : deposits.map((d) => item(`${tidy(d.amount)} BTC`, depositStatus(d)))));
+      : deposits.map((d) => item(`${show(d.amount)}`, depositStatus(d)))));
   } catch { /* try again on the next poll */ }
 }
 
@@ -1224,8 +1296,8 @@ $('withdraw-form').addEventListener('submit', async (e) => {
     if (chain.encodeAddress(to, info.bitcoinVersions) === info.pegAddress) {
       throw new Error("That's the bridge's own address. Withdraw to a Bitcoin address of yours.");
     }
-    const amount = chain.parseBTC($('withdraw-amount').value);
-    if (amount < chain.parseBTC(info.minPegOut)) throw new Error(`The minimum withdrawal is ${tidy(info.minPegOut)} BTC.`);
+    const amount = readAmount('withdraw-amount');
+    if (amount < chain.parseBTC(info.minPegOut)) throw new Error(`The minimum withdrawal is ${show(info.minPegOut)}.`);
     const reserve = chain.decodeAddress(info.reserveAddress, info.btcvmVersions);
     const { txid, unknown } = await pay(chain.pkScript(reserve), amount, chain.pegOutData(to), (id) => {
       pendingTxid = id;
@@ -1234,6 +1306,7 @@ $('withdraw-form').addEventListener('submit', async (e) => {
     if (unknown) showResult($('withdraw-result'), unknownOutcome, false, txid);
     else showResult($('withdraw-result'), 'Withdrawal sent. The bridge pays out once it is in a block. Transaction:', true, txid);
     $('withdraw-form').reset();
+    resetAmount('withdraw-amount');
   } catch (err) {
     // The bridge refused it, so it will never be paid; forget it.
     if (err.rejected && pendingTxid) saveWithdrawals(savedWithdrawals().filter((w) => w.txid !== pendingTxid));
@@ -1255,11 +1328,11 @@ async function renderWithdrawals() {
   if (!key) return;
   const gen = generation;
   const rows = savedWithdrawals().map((w) => {
-    const li = item(`${w.amount} BTC to ${w.to.slice(0, 8)}…`, { text: 'Checking…', class: 'status-waiting' });
+    const li = item(`${show(w.amount)} to ${w.to.slice(0, 8)}…`, { text: 'Checking…', class: 'status-waiting' });
     api(`/api/pegout/${w.txid}`).then((p) => {
       if (gen !== generation) return;
       if (p.status === 'paid') {
-        li.lastChild.textContent = `Paid ${tidy(p.pays)} BTC on Bitcoin`;
+        li.lastChild.textContent = `Paid ${show(p.pays)} on Bitcoin`;
         li.lastChild.className = 'status-done';
       } else if (p.status === 'pending') {
         li.lastChild.textContent = 'Waiting for the bridge';
@@ -1278,7 +1351,7 @@ $('faucet-claim').addEventListener('click', async (e) => {
   e.target.disabled = true;
   try {
     const r = await api('/api/faucet', { address: myAddress() });
-    showResult($('faucet-result'), `Sent ${tidy(r.amount)} BTC. It arrives in the next block.`, true);
+    showResult($('faucet-result'), `Sent ${show(r.amount)}. It arrives in the next block.`, true);
     setTimeout(refreshWallet, 3000);
   } catch (err) {
     showResult($('faucet-result'), err.message, false);
@@ -1286,6 +1359,137 @@ $('faucet-claim').addEventListener('click', async (e) => {
     e.target.disabled = false;
   }
 });
+
+// --- unit toggle and amount fields -------------------------------------------------
+
+const PRICE_URL = 'https://mempool.space/api/v1/prices';
+const amountFields = ['send-amount', 'move-amount', 'withdraw-amount'];
+let priceUsable = false;
+
+// refreshPrice fetches BTC's dollar price. It is used for ten minutes, so a
+// failed fetch or two leaves the last one in place; after that USD is off
+// until a fetch succeeds.
+async function refreshPrice() {
+  if (info && info.bitcoinNetwork === 'mainnet') {
+    try {
+      const res = await fetch(PRICE_URL, { cache: 'no-store' });
+      if (res.ok) {
+        const usd = Number((await res.json()).USD);
+        if (Number.isFinite(usd) && usd > 0) price = { usd, time: Date.now() };
+      }
+    } catch { /* keep the last price until it is too old */ }
+  }
+  renderUnits();
+}
+
+// Text for an amount field, in a unit; plain digits, so it reads back.
+function inputText(n, u) {
+  if (u === 'sats') return n.toString();
+  if (u === 'usd') return units.format(n, 'usd', usdPrice()).replace(/[$,<\s]/g, '');
+  return units.format(n, 'btc').replace(/[,\sBTC]/g, '');
+}
+
+// Each amount field keeps the unit its text was typed in (data-unit), so a
+// change of unit or a price that expires never reinterprets it: dollars
+// typed with no current price are refused, not read as BTC.
+function readAmount(id) {
+  const field = $(id);
+  return units.parse(field.value, field.dataset.unit || shownUnit(), usdPrice());
+}
+
+// renderAmountField labels a field with its unit and shows, under it,
+// exactly what would be sent.
+function renderAmountField(id) {
+  const field = $(id);
+  const u = field.dataset.unit || shownUnit();
+  field.inputMode = u === 'sats' ? 'numeric' : 'decimal';
+  field.placeholder = { btc: '0.0001', sats: '10,000', usd: '6.42' }[u];
+  $(`${id}-unit`).textContent = { btc: 'BTC', sats: 'sats', usd: 'USD' }[u];
+  const hint = $(`${id}-hint`);
+  if (!field.value.trim()) {
+    hint.textContent = '';
+    hint.className = 'amount-hint';
+    return;
+  }
+  try {
+    const n = readAmount(id);
+    const at = u === 'usd' ? ` at ${units.format(chain.SATS, 'usd', usdPrice())} per BTC` : '';
+    hint.textContent = `Sends exactly ${units.exact(n)}${at}.`;
+    hint.className = 'amount-hint';
+  } catch (err) {
+    hint.textContent = err.message[0].toUpperCase() + err.message.slice(1);
+    hint.className = 'amount-hint error';
+  }
+}
+
+function resetAmount(id) {
+  $(id).value = '';
+  $(id).dataset.unit = shownUnit();
+  renderAmountField(id);
+}
+
+for (const id of amountFields) $(id).addEventListener('input', () => renderAmountField(id));
+
+// renderUnits redraws every amount in the unit shown, and the toggle.
+function renderUnits() {
+  const usable = Boolean(usdPrice());
+  priceUsable = usable;
+  for (const b of document.querySelectorAll('.unit-toggle button')) {
+    b.setAttribute('aria-pressed', String(b.dataset.unit === shownUnit()));
+    if (b.dataset.unit !== 'usd') continue;
+    b.setAttribute('aria-disabled', String(!usable));
+    b.title = usable ? `1 BTC = ${units.format(chain.SATS, 'usd', usdPrice())}, from mempool.space`
+      : info && info.bitcoinNetwork !== 'mainnet' ? 'Test coins have no dollar price.'
+        : "The BTC price isn't available right now.";
+  }
+  for (const id of amountFields) {
+    if (!$(id).value.trim()) $(id).dataset.unit = shownUnit();
+    renderAmountField(id);
+  }
+  if (!info) return;
+  renderInfo();
+  renderPeg();
+  renderVmWallet();
+  renderBTCWallet();
+  renderAvailable();
+  renderInflight();
+  refreshDeposits();
+  if (!$('panel-withdraw').hidden) renderWithdrawals();
+}
+
+// setUnit picks the unit amounts show in, and converts what is typed in
+// the amount fields to it.
+function setUnit(u) {
+  if (!units.UNITS.includes(u) || (u === 'usd' && !usdPrice())) return;
+  for (const id of amountFields) {
+    const field = $(id);
+    if (!field.value.trim()) continue;
+    try { field.value = inputText(readAmount(id), u); } catch { /* left as typed */ }
+    field.dataset.unit = u;
+  }
+  unit = u;
+  store.set(UNIT_STORE, u);
+  renderUnits();
+}
+
+// nextUnit cycles BTC, sats, USD, skipping USD without a price.
+function nextUnit() {
+  const list = units.UNITS.filter((u) => u !== 'usd' || usdPrice());
+  setUnit(list[(list.indexOf(shownUnit()) + 1) % list.length]);
+}
+
+for (const b of document.querySelectorAll('.unit-toggle button')) {
+  b.addEventListener('click', () => setUnit(b.dataset.unit));
+}
+for (const el of document.querySelectorAll('.balance')) {
+  el.addEventListener('click', nextUnit);
+  el.addEventListener('keydown', (e) => {
+    if (e.key !== 'Enter' && e.key !== ' ') return;
+    e.preventDefault();
+    nextUnit();
+  });
+}
+renderUnits();
 
 // --- start -----------------------------------------------------------------------
 
@@ -1322,6 +1526,10 @@ async function start() {
   }
   renderKey();
   refreshStatus();
+  refreshPrice();
+  setInterval(refreshPrice, 5 * 60 * 1000);
+  // A price that has aged out turns USD off, even between fetches.
+  setInterval(() => { if (Boolean(usdPrice()) !== priceUsable) renderUnits(); }, 30 * 1000);
   const stream = listenForBlocks();
   // A fallback for when the event stream is down; while it's up, blocks
   // drive the refreshes and this only keeps the status (a pause, sync
