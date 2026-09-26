@@ -335,6 +335,10 @@ async function refreshStatus() {
     } else if (locked === 0n && circulating === 0n) {
       verdict = 'Nothing locked yet. The first deposit starts the peg.';
       cls += ' quiet';
+    } else if (chain.parseBTC(a.surplus) > 0n) {
+      // Locked BTC beyond what BTCVM owes: fees and small change the peg
+      // kept, or deposits not yet claimed. Never less than circulating.
+      verdict = `Fully backed, with ${show(a.surplus)} more locked than circulates.`;
     } else {
       verdict = 'Fully backed.';
     }
