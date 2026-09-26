@@ -21,8 +21,8 @@
 # docs/RUNBOOK.md. Safe to re-run: it updates BTCVM and keeps all state.
 set -euo pipefail
 
-REPO=${REPO:-https://github.com/MetalBlockchain/btcvm}
-BRANCH=${BRANCH:-feature/bitcoin-bridge}
+REPO=${REPO:-https://github.com/MetalBlockchain/btc-vm}
+BRANCH=${BRANCH:-main}
 GO_VERSION=1.24.11
 GO_SHA256=bceca00afaac856bc48b4cc33db7cd9eb383c81811379faed3bdbc80edb0af65
 METALGO_VERSION=v1.13.5

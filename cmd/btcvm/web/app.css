@@ -303,6 +303,8 @@ button.copy { font-size: var(--step--1); padding: 0.2rem 0.6rem; vertical-align:
 .balance[role="button"]:hover .unit { text-decoration: underline; text-underline-offset: 0.15em; }
 .amount-hint { margin: 0; color: var(--ink-soft); font-size: var(--step--1); }
 .amount-hint:empty { display: none; }
+.fee-line { margin: 0; color: var(--ink-soft); font-size: var(--step--1); }
+.fee-line:empty { display: none; }
 .amount-hint.error { color: var(--error); }
 .network-choice { border: 0; padding: 0; margin: 0.25rem 0 0; display: grid; gap: 0.35rem; }
 .network-choice legend { font-weight: 500; margin-bottom: 0.35rem; padding: 0; }

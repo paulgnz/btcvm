@@ -12,30 +12,34 @@
     <img class="btc-art" src="btc.png" alt="">
   </div>
   </div>
-  <p class="meta">Status as of 25 September 2026 · Source: <a href="https://github.com/paulgnz/btcvm/tree/feature/bitcoin-bridge">github.com/paulgnz/btcvm</a> (to be merged into MetalBlockchain/btcvm) · Site: <a href="https://metalbtc.com">metalbtc.com</a></p>
+  <p class="meta">Status as of 26 September 2026 · Source: <a href="https://github.com/MetalBlockchain/btc-vm">github.com/MetalBlockchain/btc-vm</a> · Site: <a href="https://metalbtc.com">metalbtc.com</a></p>
 
   <div class="headline">
-    <p><strong>Where it stands.</strong> The chain, the bridge and the web wallet are built for Bitcoin: Bitcoin's rules with SegWit and Taproot from the first block, SegWit deposit addresses, payouts at Bitcoin's live fee rate that can be replaced if they're slow, all tested against btcd's script engine. The software for independent signers, and the ceremony that brings them in, are built too. BTCVM launched as an L1 on Metal mainnet on 25 September 2026, and this site is served by it. The bridge's Bitcoin node is running and catching up with Bitcoin. Nothing has crossed the bridge yet: once the node has synced, a first small mainnet round trip.</p>
+    <p><strong>Where it stands.</strong> The chain, the bridge and the web wallet are built for Bitcoin: Bitcoin's rules with SegWit and Taproot from the first block, SegWit deposit addresses, payouts at Bitcoin's live fee rate that can be replaced if they're slow, all tested against btcd's script engine. The software for independent signers, and the ceremony that brings them in, are built too. BTCVM launched as an L1 on Metal mainnet on 25 September 2026, and this site is served by it. The bridge runs on separate signers, and the first mainnet deposits were credited on 26 September 2026. Next: the first withdrawal, to complete the round trip.</p>
     <p class="meta">Chain <code>BYogm85qvZxwX4PitKLDPzNDbAgo61nw2NSXx5VVXyZZ8yGUK</code> · Subnet <code>SWJQGgyAvXY1aBczr7WupCGpLmukvP2YdXZJUvqm1td37EcJm</code> · Validator <code>NodeID-HEPafTRm58szWKMBFfKSY1ALEWSKTNyYf</code> · Peg <code>bc1qlvaxxu9etgcwlt9u5wkn5pu4p28a5p4uxs088nmn6c2se3wn08eqls0cla</code></p>
   </div>
 
-  <h2 id="the-first-round-trip">Next: the first round trip</h2>
-  <p>Once the bridge's Bitcoin node has synced, a small amount goes each way on mainnet: a deposit from Bitcoin, credited on BTCVM, then a withdrawal paid back to Bitcoin. Each step will have a transaction on each chain, visible in the explorer, and proof of reserves should match throughout: BTC locked on Bitcoin equal to BTC circulating on BTCVM plus deposits waiting to be credited.</p>
+  <h2 id="the-first-round-trip">Now: the first round trip</h2>
+  <p>A small amount goes each way on mainnet: a deposit from Bitcoin, credited on BTCVM, then a withdrawal paid back to Bitcoin. Each step has a transaction on each chain, visible in the explorer, and proof of reserves matches throughout: BTC locked on Bitcoin equal to BTC circulating on BTCVM plus deposits waiting to be credited.</p>
+  <ul>
+    <li><strong>Deposits: done.</strong> On 26 September 2026 two deposits from the web wallet were credited on BTCVM, each two minutes after its second Bitcoin confirmation, signed by separate signers. Proof of reserves matched: 0.00033828 BTC locked, 0.00033828 BTC on BTCVM.</li>
+    <li><strong>Withdrawal: next.</strong> A withdrawal paid back to Bitcoin from the locked BTC.</li>
+  </ul>
 
   <h2>What is built</h2>
   <div class="table-wrap">
   <table>
     <thead><tr><th>Component</th><th>What it does</th><th>State</th></tr></thead>
     <tbody>
-      <tr><td>BTCVM L1</td><td>Bitcoin's transaction, script and consensus rules, with SegWit and Taproot active from the first block, and Bitcoin Core's relay and dust policy, with Snowman consensus: a transaction is final once it is in a block, in seconds. No mining reward.</td><td class="state"><span class="chip live">Built</span></td></tr>
+      <tr><td>BTCVM L1</td><td>Bitcoin's transaction, script and consensus rules, with SegWit and Taproot active from the first block, and Bitcoin Core's relay policy, except that fees are a thousandth of Bitcoin's (a payment costs 1 satoshi) and there's no dust limit (you can send 1 satoshi), with Snowman consensus: a transaction is final once it is in a block, in seconds. No mining reward.</td><td class="state"><span class="chip live">Built</span></td></tr>
       <tr><td>Peg reserve</td><td>BTC is created only in the chain's reserve blocks, which consensus enforces. That supply is locked to the peg signers and released only against BTC locked on Bitcoin.</td><td class="state"><span class="chip live">Built</span></td></tr>
-      <tr><td>Bridge</td><td>Watches both chains. It credits deposits after enough Bitcoin confirmations for the amount (6 by default), and pays out withdrawals once they are final on BTCVM, at Bitcoin's current fee rate. A payout still unconfirmed after 30 minutes is replaced with one paying the current rate, spending the same coins. It stops moving funds if the solvency check fails. Tested against btcd's script engine.</td><td class="state"><span class="chip live">Built</span></td></tr>
+      <tr><td>Bridge</td><td>Watches both chains. It credits deposits after enough Bitcoin confirmations for the amount (2 up to 0.001 BTC, 3 up to 0.005 BTC, 6 above), and pays out withdrawals once they are final on BTCVM, at Bitcoin's current fee rate. A payout still unconfirmed after 30 minutes is replaced with one paying the current rate, spending the same coins. It stops moving funds if the solvency check fails. Tested against btcd's script engine.</td><td class="state"><span class="chip live">Built</span></td></tr>
       <tr><td>Web wallet</td><td>One key, one native SegWit (bc1q…) address on both networks: Bitcoin and BTCVM balances side by side, and a one-click move between them. Keys stay in the browser, optionally encrypted to a passkey, and every payment is shown for review, read from the transaction itself, before it's signed there. The page checks the deposit address and every coin it spends itself, rather than trusting the server. It installs as an app on Mac, iPhone and Android.</td><td class="state"><span class="chip live">Built</span></td></tr>
       <tr><td>Explorer</td><td>Shows bridge activity with the transaction on each chain, proof of reserves output by output, and BTCVM blocks, transactions and addresses.</td><td class="state"><span class="chip live">Built</span></td></tr>
       <tr><td>Monitoring</td><td>Checks the peg, overdue transfers, both nodes and the validator's fee balance every minute, and sends Telegram alerts.</td><td class="state"><span class="chip live">Built</span></td></tr>
-      <tr><td>Separate signers</td><td>A signer service for each key holder, and <code>btcvm signer-setup</code>, the ceremony that brings new signers in. The tests run the ceremony, then a deposit and a withdrawal signed by separate signers. The bridge moves onto them after the first round trip, and independent operators follow.</td><td class="state"><span class="chip wait">Built</span></td></tr>
+      <tr><td>Separate signers</td><td>A signer service for each key holder, and <code>btcvm signer-setup</code>, the ceremony that brings new signers in. The tests run the ceremony, then a deposit and a withdrawal signed by separate signers. The bridge runs on them: a coordinator with no keys and three signers, each its own service, user and Bitcoin wallet, on one server for now. Independent operators follow.</td><td class="state"><span class="chip live">Running</span></td></tr>
       <tr><td>macOS wallet</td><td>A native Mac app for both networks: review every payment before it's signed, Touch ID for each signature, the key kept encrypted to the Mac's Secure Enclave, signed automatic updates, and importing keys from a Bitcoin Core <code>wallet.dat</code>, swept into the app's own address. Built and tested against Bitcoin Core; being tried out before its first release.</td><td class="state"><span class="chip wait">Testing</span></td></tr>
-      <tr><td>Bitcoin node</td><td>The bridge's own Bitcoin Core node, which the bridge and the wallet's Bitcoin balances read. It runs pruned: it checks every block but keeps only recent ones, about 100 GB.</td><td class="state"><span class="chip wait">Syncing</span></td></tr>
+      <tr><td>Bitcoin node</td><td>The bridge's own Bitcoin Core node, which the bridge and the wallet's Bitcoin balances read. It runs pruned: it checks every block but keeps only recent ones, about 100 GB. Synced with Bitcoin on 26 September 2026.</td><td class="state"><span class="chip live">Running</span></td></tr>
     </tbody>
   </table>
   </div>
@@ -114,7 +118,7 @@
   <table>
     <thead><tr><th>Stage</th><th>What you trust</th><th class="state">State</th></tr></thead>
     <tbody>
-      <tr><td>One operator</td><td>The beta: every key on one server, one operator. The caps limit what's at risk.</td><td class="state"><span class="chip wait">Today</span></td></tr>
+      <tr><td>One operator</td><td>The beta: three separate signers, but all on one server run by one operator. The caps limit what's at risk.</td><td class="state"><span class="chip wait">Today</span></td></tr>
       <tr><td>Independent signers</td><td>That fewer than the threshold of known, separate key holders collude: 2 of 3, then 3 of 5.</td><td class="state"><span class="chip wait">Staged</span></td></tr>
       <tr><td>Metal validators as signers</td><td>That no two-thirds of the chain's own validators collude: the same assumption that secures BTCVM itself.</td><td class="state"><span class="chip plan">Planned</span></td></tr>
       <tr><td>Bonded signers</td><td>As above, but signing anything the rules don't allow forfeits collateral worth more than the signer could take.</td><td class="state"><span class="chip plan">Planned</span></td></tr>
@@ -159,19 +163,20 @@
     <li class="phase done">
       <div class="phase-head"><h3>Build for Bitcoin</h3><span class="chip live">Done</span></div>
       <ul>
-        <li>BTCVM on Metal Blockchain's current release, with Bitcoin's chain parameters and rules, SegWit and Taproot active from the first block, Bitcoin Core's fee and dust policy, and the consensus-enforced peg reserve.</li>
+        <li>BTCVM on Metal Blockchain's current release, with Bitcoin's chain parameters and rules, SegWit and Taproot active from the first block, Bitcoin Core's policy with 1-satoshi fees and no dust limit, and the consensus-enforced peg reserve.</li>
         <li>Bridge with personal SegWit deposit addresses, payouts at Bitcoin's live fee rate, replaceable payouts, a solvency audit, caps, refunds and a health monitor, tested against btcd's script engine.</li>
         <li>Web wallet with native SegWit addresses, explorer and proof of reserves.</li>
       </ul>
     </li>
     <li class="phase now">
-      <div class="phase-head"><h3>Prove the round trip</h3><span class="chip wait">Next</span></div>
+      <div class="phase-head"><h3>Prove the round trip</h3><span class="chip wait">Now</span></div>
       <ul>
         <li><span class="step-tag">Done</span>Launch the L1 on Metal mainnet, and serve this site from it.</li>
-        <li><span class="step-tag todo">Now</span>The bridge's Bitcoin node, pruned Bitcoin Core, catching up with Bitcoin.</li>
-        <li><span class="step-tag todo">Next</span>A first small mainnet round trip (<a href="#the-first-round-trip">above</a>): a deposit credited on BTCVM, then a withdrawal paid back to Bitcoin.</li>
-        <li>The wallet's one-click move from its Bitcoin balance, reviewed and signed in the browser.</li>
-        <li><span class="step-tag">Done</span>HTTPS, and daily encrypted backups of the keys, bridge state and the deposit registry, with copies off the server. Next: a restore tested against the live keys.</li>
+        <li><span class="step-tag">Done</span>The bridge's Bitcoin node, pruned Bitcoin Core, synced with Bitcoin.</li>
+        <li><span class="step-tag">Done</span>The first mainnet deposits, credited on BTCVM (<a href="#the-first-round-trip">above</a>).</li>
+        <li><span class="step-tag">Done</span>The wallet's one-click move from its Bitcoin balance, reviewed and signed in the browser.</li>
+        <li><span class="step-tag todo">Next</span>The first withdrawal, paid back to Bitcoin.</li>
+        <li><span class="step-tag">Done</span>HTTPS, and daily encrypted backups of the keys, bridge state and the deposit registry, with copies off the server, and a restore checked against the live keys.</li>
       </ul>
       <p class="gate"><strong>Done when</strong> each direction has transaction IDs on both chains, visible in the explorer, and proof of reserves matches.</p>
     </li>
@@ -180,7 +185,7 @@
       <ul>
         <li><span class="step-tag">Built</span><strong>Signer service.</strong> A bridge process that holds no keys, and a signer service per key holder that checks every transaction against its own nodes before signing, with a signing log and a daily limit.</li>
         <li><span class="step-tag">Built</span><strong>Setup ceremony</strong> (<code>btcvm signer-setup</code>): cards, a signer set with a fingerprint, service files and health checks. The existing keys can be imported, so the peg address and the funds stay where they are.</li>
-        <li><span class="step-tag todo">Next</span><strong>Move the bridge onto them.</strong> Each key in its own signer service and a coordinator that holds none, with the peg address unchanged.</li>
+        <li><span class="step-tag">Done</span><strong>Move the bridge onto them.</strong> Each key in its own signer service and a coordinator that holds none, with the peg address unchanged.</li>
         <li><span class="step-tag todo">Next</span><strong>Independent operators.</strong> At least two people or organisations besides us, each running their own Bitcoin and BTCVM nodes and a signer, brought in through the ceremony. Then grow from 2-of-3 to 3-of-5.</li>
         <li><span class="step-tag todo">Next</span><strong>Metal validators as signers.</strong> A one-command install of the signer, a Bitcoin node and BTCVM for Metal validators, who already run the infrastructure. Grow to 5 to 7 validator signers with a two-thirds threshold, so the bridge is secured by the same operators as the chain.</li>
         <li><span class="step-tag todo">Next</span><strong>Key rotation.</strong> Move the locked BTC and the reserve to a new signer set made entirely by the new operators, retiring the beta's keys.</li>
@@ -237,7 +242,7 @@
   <h2>Verify it yourself</h2>
   <ul class="plain">
     <li>Use the bridge and explorer at <a href="https://metalbtc.com">metalbtc.com</a>. Proof of reserves lists every locked Bitcoin output, and each links to a public Bitcoin explorer.</li>
-    <li>Read or build the source at <a href="https://github.com/paulgnz/btcvm/tree/feature/bitcoin-bridge">github.com/paulgnz/btcvm</a>, which has the VM plugin, bridge, wallet and deployment scripts.</li>
+    <li>Read or build the source at <a href="https://github.com/MetalBlockchain/btc-vm">github.com/MetalBlockchain/btc-vm</a>, which has the VM plugin, bridge, wallet and deployment scripts.</li>
   </ul>
   <p class="note">This roadmap describes engineering work and its order; it isn't a schedule.</p>
 </main>

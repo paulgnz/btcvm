@@ -511,6 +511,19 @@ function renderAvailable() {
   if (onBTC) box(send, 'Bitcoin', btcBalance, $('btc-pending').textContent || 'Loading…');
   else box(send, 'BTCVM', vmBalance, 'Loading…');
   box($('withdraw-available'), 'BTCVM', vmBalance, 'Loading…');
+  renderFees(onBTC);
+}
+
+// renderFees says what a payment costs, before it's sent: on BTCVM a
+// satoshi; on Bitcoin, today's rate for a typical payment (141 vB).
+function renderFees(onBTC) {
+  if (!info) return;
+  const rate = BigInt(Math.max(info.btcFeeRate || 0, 1));
+  $('send-fee').textContent = onBTC
+    ? `Network fee: about ${showSats(141n * rate)} (${rate} sat/vB), paid to Bitcoin's miners.`
+    : `Network fee: ${showSats(1n)}, whatever the amount.`;
+  $('withdraw-fee').textContent =
+    `Fees: ${showSats(1n)} on BTCVM, then Bitcoin's network fee, about ${show(info.payoutFee)} today, out of the amount.`;
 }
 for (const radio of document.querySelectorAll('input[name=send-network]')) radio.addEventListener('change', renderAvailable);
 

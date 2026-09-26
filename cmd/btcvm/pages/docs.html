@@ -58,6 +58,20 @@
     </table>
     </div>
     <p><strong>With several validators,</strong> each sets its own fee address. Metal takes turns choosing which validator proposes each block, weighted by stake, and that validator collects the fees in it. So fees spread across validators roughly in proportion to their stake. BTCVM only makes a block when there are payments, so a validator's share also depends on traffic. The beta starts with one validator.</p>
+    <h3 id="compare">How BTCVM compares</h3>
+    <div class="table-wrap">
+    <table class="fees-table">
+      <thead><tr><th></th><th>Bitcoin</th><th>BTCVM</th><th>Lightning</th></tr></thead>
+      <tbody>
+        <tr><td>Smallest payment</td><td>294–546 satoshis (the dust limit)</td><td>1 satoshi</td><td>1 satoshi (thousandths inside channels)</td></tr>
+        <tr><td>Fee for a payment</td><td>Hundreds of satoshis at 1–5 sat/vB, far more when blocks are full</td><td>1 satoshi, whatever the amount</td><td>Often 0–1 satoshi plus about 0.01–0.1% of the amount, more through some wallets</td></tr>
+        <tr><td>Final after</td><td>About 10 minutes per block; an hour for 6 confirmations</td><td>Seconds, and can't be reversed</td><td>Seconds, if a route is found</td></tr>
+        <tr><td>Setup</td><td>None</td><td>None: ordinary Bitcoin addresses, and the receiver can be offline</td><td>Channels and liquidity; the receiver must be online</td></tr>
+        <tr><td>Who holds the BTC</td><td>You</td><td>You on BTCVM; the BTC behind it is locked on Bitcoin under the peg signers (2 of 3)</td><td>You, in channels</td></tr>
+      </tbody>
+    </table>
+    </div>
+    <p class="muted">Lightning fees depend on the route and the wallet; the figures are typical.</p>
     <p><strong>No fee is destroyed or leaves the peg.</strong> Fees paid on BTCVM stay there as ordinary BTC, backed by BTC locked on Bitcoin like any other. The bridge's signers aren't paid from fees yet.</p>
 
     <h2 id="trust">Trust and limits</h2>
@@ -74,7 +88,7 @@
     <h2 id="wallets">Wallets</h2>
     <p><strong>In the browser.</strong> The <a href="/">bridge page</a> is a wallet: your key is made in the browser and never leaves it. Protect it with a passkey, for example one saved in 1Password, and opening the wallet takes the passkey. Passkey protection needs a passkey provider that supports the PRF extension; older security keys don't. Every coin a payment spends is checked against the raw transaction that created it, so the server can't inflate a fee. Before anything is signed, the wallet shows what the payment does (who's paid, the change back to you, a withdrawal's Bitcoin address, and the fee), read from the transaction itself, and signs only once you confirm.</p>
     <p><strong>On a Mac.</strong> A <a href="/download">Mac app</a> is being tested before its first release: the key encrypted to the Mac's Secure Enclave, Touch ID for every payment, and import from a Bitcoin Core <code>wallet.dat</code>, whose keys are read on the Mac and never sent anywhere.</p>
-    <p>The web wallet is open source, in the <a href="https://github.com/paulgnz/btcvm/tree/feature/bitcoin-bridge">BTCVM repository</a> (<code>cmd/btcvm/web</code>).</p>
+    <p>The web wallet is open source, in the <a href="https://github.com/MetalBlockchain/btc-vm">BTCVM repository</a> (<code>cmd/btcvm/web</code>).</p>
     <p>Whichever you use, back up your key. It's your wallet on both networks, and without it the BTC can't be recovered.</p>
 
     <h2 id="developers">For developers</h2>
@@ -98,9 +112,9 @@ GET  /api/btc/rawtx/{txid}     a Bitcoin transaction's bytes
 POST /api/btc/tx               {"hex": …}: broadcast on Bitcoin
 POST /api/btc/scan             {"addresses": […]}: find coins (a job)
 GET  /api/btc/scan/{id}        that job's progress and coins found</pre>
-    <p>The source, including the chain, the bridge, the web wallet and the deployment scripts, is on <a href="https://github.com/paulgnz/btcvm/tree/feature/bitcoin-bridge">GitHub</a>.</p>
+    <p>The source, including the chain, the bridge, the web wallet and the deployment scripts, is on <a href="https://github.com/MetalBlockchain/btc-vm">GitHub</a>.</p>
 
     <h2 id="security">Security</h2>
-    <p>Please report vulnerabilities privately through <a href="https://github.com/paulgnz/btcvm/security/advisories/new">GitHub's security advisories</a>, not in a public issue.</p>
+    <p>Please report vulnerabilities privately through <a href="https://github.com/MetalBlockchain/btc-vm/security/advisories/new">GitHub's security advisories</a>, not in a public issue.</p>
   </main>
 {{end}}
