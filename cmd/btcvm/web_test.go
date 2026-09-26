@@ -194,3 +194,15 @@ func TestWebReview(t *testing.T) {
 	require.NoError(t, err, string(out))
 	require.Equal(t, "ok\n", string(out))
 }
+
+// TestWebUnits runs the web wallet's amount-unit checks: BTC, sats and USD
+// convert to exact satoshis, and USD is refused without a fresh price.
+func TestWebUnits(t *testing.T) {
+	node, err := exec.LookPath("node")
+	if err != nil {
+		t.Skip("node is not installed")
+	}
+	out, err := exec.Command(node, "testdata/units_check.mjs").CombinedOutput()
+	require.NoError(t, err, string(out))
+	require.Equal(t, "ok\n", string(out))
+}

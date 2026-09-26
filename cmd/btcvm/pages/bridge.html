@@ -109,15 +109,20 @@
             <p class="address"><span id="my-address"></span> <button class="copy" data-copy="my-address" aria-label="Copy your address">Copy</button></p>
             <p class="address-note" id="address-note"></p>
             <p class="address address-btc" id="btc-address-line" hidden>On Bitcoin: <span id="my-btc-address"></span> <button class="copy" data-copy="my-btc-address" aria-label="Copy your Bitcoin address">Copy</button></p>
+            <div class="unit-toggle" role="group" aria-label="Show amounts in">
+              <button type="button" data-unit="btc" aria-pressed="true">BTC</button>
+              <button type="button" data-unit="sats" aria-pressed="false">sats</button>
+              <button type="button" data-unit="usd" aria-pressed="false" aria-disabled="true" title="The BTC price isn't available right now.">USD</button>
+            </div>
             <div class="balances">
               <div class="balance-tile tile-btc">
                 <p class="tile-label">On Bitcoin</p>
-                <p class="balance"><span class="amount" id="btc-balance">…</span> <span class="unit">BTC</span></p>
+                <p class="balance" role="button" tabindex="0" title="Show in BTC, sats or USD"><span class="amount" id="btc-balance">…</span> <span class="unit" id="btc-balance-unit">BTC</span></p>
                 <p class="balance-pending" id="btc-pending"></p>
               </div>
               <div class="balance-tile tile-vm">
                 <p class="tile-label">On BTCVM</p>
-                <p class="balance"><span class="amount" id="balance">…</span> <span class="unit">BTC</span></p>
+                <p class="balance" role="button" tabindex="0" title="Show in BTC, sats or USD"><span class="amount" id="balance">…</span> <span class="unit" id="balance-unit">BTC</span></p>
                 <p class="balance-pending" id="balance-pending"></p>
               </div>
             </div>
@@ -186,8 +191,9 @@
           <div class="available" id="send-available" aria-live="polite"></div>
           <label for="send-to">To address</label>
           <input id="send-to" autocomplete="off" spellcheck="false" required>
-          <label for="send-amount">Amount (BTC)</label>
-          <input id="send-amount" inputmode="decimal" autocomplete="off" required>
+          <label for="send-amount">Amount (<span id="send-amount-unit">BTC</span>)</label>
+          <input id="send-amount" inputmode="decimal" autocomplete="off" aria-describedby="send-amount-hint" required>
+          <p class="amount-hint" id="send-amount-hint" aria-live="polite"></p>
           <button class="primary" type="submit">Send</button>
           <p class="result" id="send-result" aria-live="polite"></p>
         </form>
@@ -204,13 +210,14 @@
           <form id="move-form" class="stack move-form">
             <h3>From your Bitcoin balance</h3>
             <p class="muted" id="move-available">Your Bitcoin balance appears on the Wallet tab.</p>
-            <label for="move-amount">Amount (BTC)</label>
-            <input id="move-amount" inputmode="decimal" autocomplete="off" required>
+            <label for="move-amount">Amount (<span id="move-amount-unit">BTC</span>)</label>
+            <input id="move-amount" inputmode="decimal" autocomplete="off" aria-describedby="move-amount-hint" required>
+            <p class="amount-hint" id="move-amount-hint" aria-live="polite"></p>
             <button class="primary" type="submit">Move to BTCVM</button>
             <p class="result" id="move-result" aria-live="polite"></p>
           </form>
           <h3>Or from any Bitcoin wallet or exchange</h3>
-          <p>Send BTC on Bitcoin to your deposit address below. Once it has enough confirmations (above), it arrives in your BTCVM balance, less a <span id="vm-fee">…</span> BTC fee. The minimum is <span id="min-deposit">…</span> BTC.<span id="deposit-limits"></span></p>
+          <p>Send BTC on Bitcoin to your deposit address below. Once it has enough confirmations (above), it arrives in your BTCVM balance, less a <span id="vm-fee">…</span> fee. The minimum is <span id="min-deposit">…</span>.<span id="deposit-limits"></span></p>
           <div class="deposit-address">
             <div id="deposit-qr" class="qr" aria-hidden="true"></div>
             <div>
@@ -231,13 +238,14 @@
         <p class="route"><span class="route-chain route-vm">BTCVM</span><span class="route-arrow" aria-hidden="true">→</span><span class="route-chain route-btc">Bitcoin</span><span class="visually-hidden">: BTC moves from BTCVM to Bitcoin</span></p>
         <p class="needs-key">Create or import a key on the Wallet tab first.</p>
         <form id="withdraw-form" class="stack with-key">
-          <p>The bridge pays your Bitcoin address once the withdrawal is final on BTCVM, in seconds, less the Bitcoin network fee, about <span id="btc-fee">…</span> BTC today. The payment then confirms in the next Bitcoin block it makes, usually about 10 minutes. The minimum is <span id="min-pegout">…</span> BTC.</p>
+          <p>The bridge pays your Bitcoin address once the withdrawal is final on BTCVM, in seconds, less the Bitcoin network fee, about <span id="btc-fee">…</span> today. The payment then confirms in the next Bitcoin block it makes, usually about 10 minutes. The minimum is <span id="min-pegout">…</span>.</p>
           <div class="available available-vm" id="withdraw-available" aria-live="polite"></div>
           <label for="withdraw-to">To Bitcoin address</label>
           <input id="withdraw-to" autocomplete="off" spellcheck="false" required>
           <button type="button" class="link-button" id="withdraw-to-mine">Use my Bitcoin address</button>
-          <label for="withdraw-amount">Amount (BTC)</label>
-          <input id="withdraw-amount" inputmode="decimal" autocomplete="off" required>
+          <label for="withdraw-amount">Amount (<span id="withdraw-amount-unit">BTC</span>)</label>
+          <input id="withdraw-amount" inputmode="decimal" autocomplete="off" aria-describedby="withdraw-amount-hint" required>
+          <p class="amount-hint" id="withdraw-amount-hint" aria-live="polite"></p>
           <button class="primary" type="submit">Withdraw</button>
           <p class="result" id="withdraw-result" aria-live="polite"></p>
         </form>

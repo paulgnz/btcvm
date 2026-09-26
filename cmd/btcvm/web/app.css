@@ -291,6 +291,19 @@ button.copy { font-size: var(--step--1); padding: 0.2rem 0.6rem; vertical-align:
 .tile-btc .tile-label { color: var(--coin-ink); }
 .tile-vm .tile-label { color: var(--vm-ink); }
 @media (max-width: 30rem) { .balances { grid-template-columns: 1fr; } }
+/* BTC | sats | USD: the unit every amount shows and is typed in. Clicking
+   a balance cycles it too. */
+.unit-toggle { display: inline-flex; margin-top: 1rem; border: 1px solid var(--control-border); border-radius: 4px; overflow: hidden; }
+.unit-toggle button { border: 0; border-radius: 0; padding: 0.3rem 0.8rem; font-size: var(--step--1); min-height: 0; }
+.unit-toggle button + button { border-left: 1px solid var(--control-border); }
+.unit-toggle button[aria-pressed="true"], .unit-toggle button[aria-pressed="true"]:hover { background: var(--btn); color: var(--btn-ink); }
+.unit-toggle button[aria-disabled="true"] { opacity: 0.45; cursor: not-allowed; }
+.unit-toggle button[aria-disabled="true"]:hover { background: none; }
+.balance[role="button"] { cursor: pointer; }
+.balance[role="button"]:hover .unit { text-decoration: underline; text-underline-offset: 0.15em; }
+.amount-hint { margin: 0; color: var(--ink-soft); font-size: var(--step--1); }
+.amount-hint:empty { display: none; }
+.amount-hint.error { color: var(--error); }
 .network-choice { border: 0; padding: 0; margin: 0.25rem 0 0; display: grid; gap: 0.35rem; }
 .network-choice legend { font-weight: 500; margin-bottom: 0.35rem; padding: 0; }
 .network-choice label { font-weight: 400; margin: 0; display: flex; gap: 0.5rem; align-items: baseline; }
