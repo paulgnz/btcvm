@@ -104,6 +104,8 @@ dbcache=8000
 maxconnections=40
 maxuploadtarget=20000
 rpcbind=127.0.0.1
+# Load the bridge's wallet on every start, not only when the bridge asks.
+wallet=btcvm
 rpcallowip=127.0.0.1
 rpcuser=btcvm
 rpcpassword=$(openssl rand -hex 24)

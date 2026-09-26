@@ -54,6 +54,9 @@ for src in "${staged[@]}"; do
   # Each signer watches the peg through its own Bitcoin Core wallet.
   sed -i '/^BITCOIN_WALLET=/d' "$dir/signer.env"
   echo "BITCOIN_WALLET=$user" >>"$dir/signer.env"
+  # Bitcoin Core loads it on every start, so a restart can't leave it blind.
+  conf=/var/lib/bitcoin-main/bitcoin.conf
+  [[ -f $conf ]] && ! grep -qx "wallet=$user" "$conf" && echo "wallet=$user" >>"$conf"
 
   # The staged unit, moved to the new directory, user and binary.
   sed -e "s#$src#$dir#g" -e "s#^User=.*#User=$user#" -e "s#^ExecStart=[^ ]*#ExecStart=$BIN#" \
