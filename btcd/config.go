@@ -52,7 +52,7 @@ const (
 	defaultDbType                = "ffldb"
 	defaultTrickleInterval       = peer.DefaultTrickleInterval
 	defaultBlockMinSize          = 0
-	btcvmMinRelayTxFee           = btcutil.Amount(10) // satoshis per kvB
+	btcvmMinRelayTxFee           = btcutil.Amount(1) // satoshis per kvB
 	defaultBlockMaxSize          = 750000
 	defaultBlockMinWeight        = 0
 	defaultBlockMaxWeight        = 3000000
@@ -477,9 +477,9 @@ func LoadConfig(nodeId string, overrideCfg *Config) (*Config, []string, error) {
 		DbType:               defaultDbType,
 		RPCKey:               defaultRPCKeyFile,
 		RPCCert:              defaultRPCCertFile,
-		// BTCVM has no miners to pay: a hundredth of Bitcoin Core's relay
-		// fee (0.01 sat/vB, about a satoshi for a payment) still prices
-		// spam, and any output of a satoshi or more relays.
+		// BTCVM has no miners to pay: 0.001 sat/vB, so a payment of up to
+		// 1,000 vB costs a single satoshi (the floor), and any output of a
+		// satoshi or more relays.
 		MinRelayTxFee:       btcvmMinRelayTxFee.ToBTC(),
 		DustRelayFee:        0,
 		TrickleInterval:     defaultTrickleInterval,

@@ -12,11 +12,10 @@ export const SATS = 100_000_000n;
 // estimate, passed in; this is the fallback.
 export const BTC_FEE_RATE = 5n;
 
-// BTCVM's relay minimum is 10 sat/kvB (0.01 sat/vB), and at least 10 sats
-// for a transaction under 100 vB. BTCVM blocks have room to spare, so twice
-// the minimum always makes the next one: about 3 sats for a payment.
-export const VM_FEE_PER_KVB = 20n;
-const VM_RELAY_PER_KVB = 10n;
+// BTCVM's relay minimum is 1 sat/kvB (0.001 sat/vB), and never less than a
+// satoshi: a payment costs 1 sat. BTCVM blocks have room to spare, so the
+// minimum makes the next one.
+export const VM_FEE_PER_KVB = 1n;
 
 // The smallest output the wallet creates. On Bitcoin, Core's dust threshold
 // for the largest standard output; on BTCVM, a satoshi. Change below it goes
@@ -472,12 +471,10 @@ export async function planPayment({ key, utxos, getRawTx, script, amount, data, 
   return { tx, inputTotal: total, fee, unsignedHex: hex(serialize(tx)) };
 }
 
-// vmFee is what a BTCVM transaction of size vbytes pays: twice the relay
-// rate, and never less than the relay minimum.
+// vmFee is what a BTCVM transaction of size vbytes pays: the node's relay
+// minimum, computed as the node does (a satoshi under 1,000 vB).
 export function vmFee(size) {
-  const relay = (size * VM_RELAY_PER_KVB) / 1000n || VM_RELAY_PER_KVB;
-  const fee = (size * VM_FEE_PER_KVB + 999n) / 1000n;
-  return fee > relay ? fee : relay;
+  return (size * VM_FEE_PER_KVB) / 1000n || VM_FEE_PER_KVB;
 }
 
 // signPlan signs a planned payment, and checks the signed transaction pays

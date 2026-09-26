@@ -28,16 +28,16 @@ The parameters live in [`btcd/params.go`](btcd/params.go). The encodings match B
 
 ## Fees and policy
 
-Relay policy is Bitcoin Core's standard policy, as btcd implements it ([`btcd/mempool/policy.go`](btcd/mempool/policy.go)):
+Relay policy is Bitcoin Core's standard policy, as btcd implements it ([`btcd/mempool/policy.go`](btcd/mempool/policy.go)), with two exceptions: BTCVM has no miners to pay, so fees are a thousandth of Bitcoin's and there is no dust limit.
 
 | Rule | Value |
 |---|---|
-| Minimum relay fee | 1 sat/vB, required on every transaction (no free or priority relay) |
-| Dust | an output worth less than it costs to spend at 3 sat/vB makes the transaction non-standard |
+| Minimum relay fee | 0.001 sat/vB (`minRelayTxFee`), and never less than 1 sat: a payment costs 1 sat. Required on every transaction (no free or priority relay) |
+| Dust | none (`dustRelayFee` 0): any output of 1 sat or more; an empty output is refused |
 | OP_RETURN | never dust; at most one per transaction |
 | Replace-by-fee | BIP125 |
 
-The wallets pay 2 sat/vB, a few hundred satoshis for a typical payment. Fees go to the validator that built the block.
+The wallets pay the minimum: 1 sat for a typical payment, whatever the amount. Fees go to the validator that built the block. Both settings are node policy, not consensus: a node can set its own in the chain config.
 
 ## How it works
 

@@ -122,9 +122,9 @@ func TestWalletVectors(t *testing.T) {
 		if p.FeeRate == "vm" {
 			// BTCVM: at least the relay minimum, with the node's own rules
 			// for dust (a satoshi) and standardness.
-			relay := vsize * 10 / 1000
+			relay := vsize * 1 / 1000
 			if relay == 0 {
-				relay = 10
+				relay = 1
 			}
 			require.GreaterOrEqual(in-out, relay, p.Name)
 			require.NoError(mempool.CheckTransactionStandard(btcutil.NewTx(tx), 1, time.Unix(0, 0), 0, 2), p.Name)

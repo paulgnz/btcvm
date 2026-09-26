@@ -68,8 +68,8 @@ const cases = [
   { name: 'to a Taproot address', coins: [D], to: chain.pkScript({ kind: chain.P2TR, hash: sha256(enc.encode('a taproot key')) }), amount: D / 4n },
   { name: 'change below the dust limit goes to the fee', coins: [D / 1000n + 1000n], to: chain.pkScript(keys[1].dest), amount: D / 1000n },
   { name: 'at a high fee rate', coins: [D], to: chain.pkScript(keys[1].dest), amount: D / 2n, feeRate: 80n },
-  // BTCVM payments pay twice the relay minimum (0.02 sat/vB), and can be a
-  // single satoshi.
+  // BTCVM payments pay the relay minimum, a satoshi, and can be a single
+  // satoshi.
   { name: 'BTCVM payment', coins: [3n * D, 5n * D], to: chain.pkScript(keys[1].dest), amount: 6n * D, vm: true },
   { name: 'BTCVM withdrawal', coins: [D / 2n], to: chain.pkScript(reserve), amount: D / 5n, data: chain.pegOutData(keys[2].dest), vm: true },
   { name: 'BTCVM payment of one satoshi', coins: [1000n], to: chain.pkScript(keys[1].dest), amount: 1n, vm: true },

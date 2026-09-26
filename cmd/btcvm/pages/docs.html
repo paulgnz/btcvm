@@ -42,7 +42,7 @@
       <dt>Signers</dt><dd><span data-info="signers">…</span></dd>
       <dt>Peg address on Bitcoin</dt><dd><code data-info="pegAddress">…</code></dd>
     </dl>
-    <p>Sending on BTCVM costs 2 sat/vB in the wallets (the relay minimum is 1 sat/vB), a few hundred satoshis for a typical payment, and is final within seconds. A Bitcoin block comes about every 10 minutes, at random, and a slow one can take much longer.</p>
+    <p>Sending on BTCVM costs 1 satoshi, whatever the amount, and is final within seconds. You can send as little as 1 satoshi. A Bitcoin block comes about every 10 minutes, at random, and a slow one can take much longer.</p>
     <p>The site measures that speed live. For every payment sent through this site, the bridge times how long it takes from receiving the payment to accepting the block that holds it. On BTCVM, an accepted block is final. It checks four times a second, so a figure can be up to a quarter of a second slow, never fast. The home page shows the median of the last 50 payments, and <code>/api/status</code> reports the median, the 90th percentile and the latest (<code>finality</code>).</p>
 
     <h3 id="where-fees-go">Where fees go</h3>
@@ -51,7 +51,7 @@
     <table class="fees-table">
       <thead><tr><th>Fee</th><th>When you pay it</th><th>How much</th><th>Who gets it</th></tr></thead>
       <tbody>
-        <tr><td>Network fee</td><td>Any payment on BTCVM</td><td>2 sat/vB, usually a few hundred satoshis</td><td>The validator that built the block</td></tr>
+        <tr><td>Network fee</td><td>Any payment on BTCVM</td><td>1 satoshi</td><td>The validator that built the block</td></tr>
         <tr><td>Bridge fee</td><td>Each deposit</td><td><span data-info="vmFee" data-btc>…</span> BTC</td><td>The validator that built the block (it's the fee of the transaction that credits you)</td></tr>
         <tr><td>Withdrawal fee</td><td>Each withdrawal</td><td>about <span data-info="payoutFee" data-btc>…</span> BTC today</td><td>Bitcoin's miners (it pays for the payout on Bitcoin)</td></tr>
       </tbody>

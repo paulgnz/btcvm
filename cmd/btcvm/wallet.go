@@ -14,9 +14,12 @@ import (
 	"github.com/MetalBlockchain/btcvm/btcd/wire"
 )
 
-// walletFeeRate is the fee rate, in sat/vB, the command-line wallet pays
-// on BTCVM: twice the minimum relay fee.
-const walletFeeRate = 2
+// vmFee is what the command-line wallet pays for a BTCVM transaction of
+// vsize: the node's relay minimum of 1 sat/kvB, and never less than a
+// satoshi (btcd's rule), so a payment costs 1 sat.
+func vmFee(vsize int64) int64 {
+	return max(vsize/1000, 1)
+}
 
 func newKey() (*btcec.PrivateKey, error) {
 	var secret [32]byte
@@ -112,7 +115,7 @@ func payFromKey(c chain, params *chaincfg.Params, key *btcec.PrivateKey,
 	var inputs []utxo
 	var total, fee int64
 	for n := 1; ; n++ {
-		fee = estimateVSize(n, 2, opReturnBytes) * walletFeeRate
+		fee = vmFee(estimateVSize(n, 2, opReturnBytes))
 		inputs, total, err = selectUTXOs(utxos, amount+fee)
 		if err != nil {
 			return chainhash.Hash{}, fmt.Errorf("%s: %w", from.EncodeAddress(), err)
@@ -133,7 +136,7 @@ func payFromKey(c chain, params *chaincfg.Params, key *btcec.PrivateKey,
 	if extra != nil {
 		tx.AddTxOut(extra)
 	}
-	if change := total - amount - fee; change >= bitcoinDust {
+	if change := total - amount - fee; change > 0 {
 		tx.AddTxOut(wire.NewTxOut(change, fromScript))
 	}
 

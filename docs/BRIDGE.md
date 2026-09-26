@@ -16,7 +16,7 @@ The reserve is not circulating supply. It is locked to the signers and leaves th
 
 **Peg-in (Bitcoin → BTCVM)**
 1. Each BTCVM address has its own Bitcoin deposit address: a P2WSH (`bc1q…`) address whose witness script names the BTCVM address and then the peg multisig, so only the signers can spend it (`btcvm deposit-address` prints it). The user sends BTC there from any wallet. Alternatively, a payment to the peg address can carry an `OP_RETURN` tagged `BVMD` naming the BTCVM address (`btcvm peg-in` builds it).
-2. Once the deposit has enough Bitcoin confirmations for its size (`-confirmations`, default 6, about an hour; `-confirmation-tiers` lets smaller deposits need fewer), the bridge spends the reserve. It pays the deposit amount, minus `-vm-fee` (default 0.00001 BTC, 1,000 sats), to that address, and tags the transaction `BVMI` with the deposit's outpoint.
+2. Once the deposit has enough Bitcoin confirmations for its size (`-confirmations`, default 6, about an hour; `-confirmation-tiers` lets smaller deposits need fewer), the bridge spends the reserve. It pays the deposit amount, minus `-vm-fee` (default 10 sats), to that address, and tags the transaction `BVMI` with the deposit's outpoint.
 3. BTCVM finalizes the release in its next block.
 
 **Peg-out (BTCVM → Bitcoin)**
@@ -41,7 +41,7 @@ Each is the whole data of the transaction's single `OP_RETURN` output. Transacti
 - **Exactly once.** The bridge reads its state back from both chains every time. A deposit counts as credited only if a release carrying its outpoint exists, and a peg-out as paid only if a payment carrying its txid exists. After a crash, the bridge picks up where it left off. A replacement payout spends the same coins as the payout it replaces, so at most one confirms.
 - **Spoofed tags are ignored.** Anyone can write `BVMI` or `BVMR` into a transaction. The bridge only trusts them on transactions that spend reserve or peg outputs, which only the signers can do. Otherwise, a forged `BVMI` could mark someone's deposit as already credited.
 - **Solvency check.** Before every action the bridge checks that `locked on Bitcoin ≥ circulating on BTCVM + pending peg-ins + pending peg-outs`, and halts if it does not hold. `btcvm audit` prints the same numbers for anyone to check.
-- **Deposits without a usable destination** (none, malformed, or below `-min-deposit`, default 0.0001 BTC) are not credited. They show up in the audit as `unclaimedOnBitcoin`. The same goes for untagged payments into the reserve (`unclaimedOnBTCVM`). Peg-outs below `-min-peg-out` (default 0.0003 BTC) are not paid.
+- **Deposits without a usable destination** (none, malformed, or below `-min-deposit`, default 0.0001 BTC) are not credited. They show up in the audit as `unclaimedOnBitcoin`. The same goes for untagged payments into the reserve (`unclaimedOnBTCVM`). Peg-outs below `-min-peg-out` (default 0.0001 BTC, 10,000 sats) are not paid.
 - **Caps.** `-max-deposit` and `-max-circulating` limit what's at risk: a larger deposit is held for a refund, and one that would take the total past the cap waits.
 - **Consensus pins the reserve.** Block builders cannot redirect the reserve coinbase or mint more than it (`ErrBadPegReserve`, `ErrBadCoinbaseValue`).
 

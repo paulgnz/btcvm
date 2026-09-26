@@ -120,15 +120,14 @@ func TestWebChainMatchesGo(t *testing.T) {
 	require.NoError(err)
 	require.NoError(vm.Execute())
 
-	// Change returns to the sender, and the fee is the BTCVM wallet rate
-	// (20 sat/kvB) on the signed transaction's virtual size, rounded up at
-	// most a little: a few satoshis.
+	// Change returns to the sender, and the fee is BTCVM's relay minimum:
+	// a satoshi.
 	require.Len(tx.TxOut, 3)
 	require.Equal(fromScript, tx.TxOut[2].PkScript)
 	fee := int64(500*satPerBTC) - tx.TxOut[0].Value - tx.TxOut[2].Value
 	vsize := (blockchain.GetTransactionWeight(btcutil.NewTx(tx)) + 3) / 4
-	require.GreaterOrEqual(fee, (vsize*20+999)/1000)
-	require.LessOrEqual(fee, ((vsize+2)*20+999)/1000)
+	require.Less(vsize, int64(1000))
+	require.Equal(int64(1), fee)
 
 	require.Equal(tx.TxHash().String(), got.TxID)
 	require.Equal(got.TxHex, got.InflatedHex, "an overstated UTXO value changed the transaction")
