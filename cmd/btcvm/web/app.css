@@ -256,6 +256,8 @@ button {
 button:hover { background: var(--surface-sunk); }
 button.primary { background: var(--btn); color: var(--btn-ink); border-color: var(--btn); }
 button.primary:hover { filter: brightness(1.15); background: var(--btn); }
+a.button.primary { display: inline-block; padding: 0.6rem 1.2rem; border-radius: 4px; background: var(--btn); color: var(--btn-ink); text-decoration: none; font-weight: 600; }
+a.button.primary:hover { filter: brightness(1.15); }
 button.danger { border-color: var(--error); color: var(--error); }
 button:disabled { opacity: 0.55; cursor: progress; }
 button.copy { font-size: var(--step--1); padding: 0.2rem 0.6rem; vertical-align: middle; }

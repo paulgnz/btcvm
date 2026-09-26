@@ -5,20 +5,22 @@
       <img src="icon-512.png" alt="" width="112" height="112">
       <div>
         <h1>BTCVM Wallet for Mac</h1>
-        <p class="lede">In development. Until it's ready, the <a href="/">bridge page</a> is a full wallet in your browser.</p>
+        <p class="lede">Version 0.1.1, beta. For macOS 14 or later, on Apple silicon or Intel. Signed and notarized by Apple, and it updates itself.</p>
+        <p><a class="button primary" href="/download/macos/BTCVM-Wallet.dmg">Download for Mac</a></p>
       </div>
     </div>
 
-    <h2>What it will do</h2>
+    <h2>What it does</h2>
     <ul>
       <li><strong>Both networks, one key.</strong> Your key has the same address on Bitcoin and on BTCVM, and the app shows both balances side by side.</li>
       <li><strong>Bring your Bitcoin Core wallet.</strong> Import the keys from a Bitcoin Core <code>wallet.dat</code>, legacy or descriptor, encrypted or not. It's read and decrypted on your Mac and never uploaded anywhere.</li>
       <li><strong>Review before you sign.</strong> Every payment is shown line by line (who's paid, change back to you, a withdrawal's destination, the fee) before Touch ID signs it, and the signed transaction is checked against what you reviewed before it's sent.</li>
       <li><strong>Move between chains in one step.</strong> Move BTC from your Bitcoin balance to BTCVM, and withdraw back to any Bitcoin address.</li>
       <li><strong>Your key stays on your Mac,</strong> encrypted to its Secure Enclave, so the file is useless on any other computer.</li>
-      <li><strong>Open source,</strong> with each release tagged at the code it was built from.</li>
+      <li><strong>Payments of a satoshi</strong> on BTCVM, for a fee of 1 satoshi, and amounts in BTC, sats or US dollars.</li>
     </ul>
 
+    <p>Prefer not to install anything? The <a href="/">bridge page</a> is a full wallet in your browser.</p>
     <p>The web wallet imports the same kind of key (a WIF starting with K or L), so a key you use there will open in the Mac app too.</p>
   </main>
 {{end}}

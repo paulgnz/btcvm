@@ -1,3 +1,5 @@
+<p align="center"><img src="cmd/btcvm/web/bitcoin.svg" alt="Bitcoin logo" width="120" height="120"></p>
+
 # BTCVM
 
 A Bitcoin virtual machine for [Metal Blockchain](https://github.com/MetalBlockchain/metalgo): a UTXO ledger with Bitcoin's addresses, keys, script and consensus rules, run under Snowman consensus instead of proof of work.
