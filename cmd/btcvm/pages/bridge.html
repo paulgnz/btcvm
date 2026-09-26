@@ -191,7 +191,13 @@
           <div class="available" id="send-available" aria-live="polite"></div>
           <label for="send-to">To address</label>
           <input id="send-to" autocomplete="off" spellcheck="false" required>
-          <label for="send-amount">Amount (<span id="send-amount-unit">BTC</span>)</label>
+          <div class="amount-label"><label for="send-amount">Amount (<span id="send-amount-unit">BTC</span>)</label>
+            <div class="unit-toggle compact" role="group" aria-label="Enter the amount in">
+              <button type="button" data-unit="btc" aria-pressed="true">BTC</button>
+              <button type="button" data-unit="sats" aria-pressed="false">sats</button>
+              <button type="button" data-unit="usd" aria-pressed="false" aria-disabled="true" title="The BTC price isn't available right now.">USD</button>
+            </div>
+          </div>
           <input id="send-amount" inputmode="decimal" autocomplete="off" aria-describedby="send-amount-hint" required>
           <p class="amount-hint" id="send-amount-hint" aria-live="polite"></p>
           <p class="fee-line" id="send-fee"></p>
@@ -211,7 +217,13 @@
           <form id="move-form" class="stack move-form">
             <h3>From your Bitcoin balance</h3>
             <p class="muted" id="move-available">Your Bitcoin balance appears on the Wallet tab.</p>
-            <label for="move-amount">Amount (<span id="move-amount-unit">BTC</span>)</label>
+            <div class="amount-label"><label for="move-amount">Amount (<span id="move-amount-unit">BTC</span>)</label>
+              <div class="unit-toggle compact" role="group" aria-label="Enter the amount in">
+                <button type="button" data-unit="btc" aria-pressed="true">BTC</button>
+                <button type="button" data-unit="sats" aria-pressed="false">sats</button>
+                <button type="button" data-unit="usd" aria-pressed="false" aria-disabled="true" title="The BTC price isn't available right now.">USD</button>
+              </div>
+            </div>
             <input id="move-amount" inputmode="decimal" autocomplete="off" aria-describedby="move-amount-hint" required>
             <p class="amount-hint" id="move-amount-hint" aria-live="polite"></p>
             <button class="primary" type="submit">Move to BTCVM</button>
@@ -244,7 +256,13 @@
           <label for="withdraw-to">To Bitcoin address</label>
           <input id="withdraw-to" autocomplete="off" spellcheck="false" required>
           <button type="button" class="link-button" id="withdraw-to-mine">Use my Bitcoin address</button>
-          <label for="withdraw-amount">Amount (<span id="withdraw-amount-unit">BTC</span>)</label>
+          <div class="amount-label"><label for="withdraw-amount">Amount (<span id="withdraw-amount-unit">BTC</span>)</label>
+            <div class="unit-toggle compact" role="group" aria-label="Enter the amount in">
+              <button type="button" data-unit="btc" aria-pressed="true">BTC</button>
+              <button type="button" data-unit="sats" aria-pressed="false">sats</button>
+              <button type="button" data-unit="usd" aria-pressed="false" aria-disabled="true" title="The BTC price isn't available right now.">USD</button>
+            </div>
+          </div>
           <input id="withdraw-amount" inputmode="decimal" autocomplete="off" aria-describedby="withdraw-amount-hint" required>
           <p class="amount-hint" id="withdraw-amount-hint" aria-live="polite"></p>
           <p class="fee-line" id="withdraw-fee"></p>
