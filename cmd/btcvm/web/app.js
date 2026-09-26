@@ -141,6 +141,9 @@ for (const tab of document.querySelectorAll('[role=tab]')) {
   tab.addEventListener('click', () => selectTab(tab.id.replace('tab-', '')));
 }
 selectTab('wallet');
+for (const b of document.querySelectorAll('[data-goto-tab]')) {
+  b.addEventListener('click', () => selectTab(b.dataset.gotoTab));
+}
 
 document.querySelector('[role=tablist]').addEventListener('keydown', (e) => {
   const list = tabs();

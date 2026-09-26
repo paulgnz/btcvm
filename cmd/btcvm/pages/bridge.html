@@ -73,6 +73,7 @@
         <button role="tab" id="tab-send" aria-controls="panel-send" aria-selected="false">Send</button>
         <button role="tab" id="tab-deposit" aria-controls="panel-deposit" aria-selected="false">Deposit</button>
         <button role="tab" id="tab-withdraw" aria-controls="panel-withdraw" aria-selected="false">Withdraw</button>
+        <button role="tab" id="tab-addresses" aria-controls="panel-addresses" aria-selected="false">Addresses</button>
         <button role="tab" id="tab-faucet" aria-controls="panel-faucet" aria-selected="false" hidden>Faucet</button>
       </nav>
 
@@ -169,26 +170,6 @@
             </details>
           </section>
 
-          <details class="address-book" id="ab-details">
-            <summary>Address book <span id="ab-count"></span></summary>
-            <p class="muted">Names for addresses you pay, kept in this browser only. A name is only a label: always check the full address before you confirm a payment.</p>
-            <p class="notice" id="ab-warning" role="alert" hidden></p>
-            <ul class="ab-list" id="ab-list"></ul>
-            <form id="ab-add" class="stack ab-add">
-              <h3>Add an address</h3>
-              <label for="ab-add-name">Name</label>
-              <input class="ab-name-input" id="ab-add-name" maxlength="60" autocomplete="off" placeholder="e.g. Mum" required>
-              <label for="ab-add-address">Address</label>
-              <input id="ab-add-address" autocomplete="off" spellcheck="false" required>
-              <fieldset class="network-choice">
-                <legend>For</legend>
-                <label><input type="radio" name="ab-add-network" value="btc" checked> Bitcoin</label>
-                <label><input type="radio" name="ab-add-network" value="vm"> BTCVM</label>
-              </fieldset>
-              <button type="submit">Save address</button>
-              <p class="result" id="ab-add-result" aria-live="polite"></p>
-            </form>
-          </details>
 
           <details class="key-details" id="key-details">
             <summary>Show or remove your key</summary>
@@ -231,6 +212,7 @@
             </div>
           </div>
           <p class="ab-save-result" id="send-to-save-result" aria-live="polite"></p>
+          <button type="button" class="link-button" data-goto-tab="addresses">Manage saved addresses</button>
           <div class="amount-label"><label for="send-amount">Amount (<span id="send-amount-unit">BTC</span>)</label>
             <div class="unit-toggle compact" role="group" aria-label="Enter the amount in">
               <button type="button" data-unit="btc" aria-pressed="true">BTC</button>
@@ -310,6 +292,7 @@
           </div>
           <p class="ab-save-result" id="withdraw-to-save-result" aria-live="polite"></p>
           <button type="button" class="link-button" id="withdraw-to-mine">Use my Bitcoin address</button>
+          <button type="button" class="link-button" data-goto-tab="addresses">Manage saved addresses</button>
           <div class="amount-label"><label for="withdraw-amount">Amount (<span id="withdraw-amount-unit">BTC</span>)</label>
             <div class="unit-toggle compact" role="group" aria-label="Enter the amount in">
               <button type="button" data-unit="btc" aria-pressed="true">BTC</button>
@@ -324,6 +307,28 @@
           <p class="result" id="withdraw-result" aria-live="polite"></p>
         </form>
         <ol id="withdrawals" class="transfers with-key"></ol>
+      </div>
+
+      <!-- Addresses -->
+      <div class="panel address-book" role="tabpanel" id="panel-addresses" aria-labelledby="tab-addresses" hidden>
+            <h2>Address book <span id="ab-count"></span></h2>
+            <p class="muted">Names for addresses you pay, kept in this browser only. A name is only a label: always check the full address before you confirm a payment.</p>
+            <p class="notice" id="ab-warning" role="alert" hidden></p>
+            <ul class="ab-list" id="ab-list"></ul>
+            <form id="ab-add" class="stack ab-add">
+              <h3>Add an address</h3>
+              <label for="ab-add-name">Name</label>
+              <input class="ab-name-input" id="ab-add-name" maxlength="60" autocomplete="off" placeholder="e.g. Mum" required>
+              <label for="ab-add-address">Address</label>
+              <input id="ab-add-address" autocomplete="off" spellcheck="false" required>
+              <fieldset class="network-choice">
+                <legend>For</legend>
+                <label><input type="radio" name="ab-add-network" value="btc" checked> Bitcoin</label>
+                <label><input type="radio" name="ab-add-network" value="vm"> BTCVM</label>
+              </fieldset>
+              <button type="submit">Save address</button>
+              <p class="result" id="ab-add-result" aria-live="polite"></p>
+            </form>
       </div>
 
       <!-- Faucet -->
