@@ -489,3 +489,27 @@ func TestSignersCheckKeyFiles(t *testing.T) {
 	require.ErrorContains(check(a, again), "same key")
 	require.ErrorContains(check(a, other), "not one of the set's public keys")
 }
+
+// TestPayoutPrefersCoinLeavingPegChange: a payout exactly the size of a
+// peg coin would leave no change, and the 330 sats every payout returns to
+// the peg would come out of the user's payout. A larger coin that leaves
+// that change is preferred; the exact one is used only if none does.
+func TestPayoutPrefersCoinLeavingPegChange(t *testing.T) {
+	require := require.New(t)
+	coin := func(v int64, n byte) utxo {
+		return utxo{outPoint: wire.OutPoint{Hash: [32]byte{n}}, value: v}
+	}
+	exact, larger, huge := coin(10_000, 1), coin(23_828, 2), coin(1_000_000, 3)
+
+	picked, err := selectForPayout([]utxo{exact, larger, huge}, 10_000)
+	require.NoError(err)
+	require.Equal([]utxo{larger}, picked, "the smallest coin leaving at least pegDust of change")
+
+	picked, err = selectForPayout([]utxo{exact}, 10_000)
+	require.NoError(err)
+	require.Equal([]utxo{exact}, picked, "the exact coin when nothing else covers it")
+
+	picked, err = selectForPayout([]utxo{coin(10_200, 4), exact}, 10_000)
+	require.NoError(err)
+	require.Equal(int64(10_000), picked[0].value, "no coin leaves pegDust: the smallest that covers it")
+}

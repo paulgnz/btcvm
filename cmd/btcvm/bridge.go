@@ -519,13 +519,22 @@ func (b *bridge) logWaiting(failed error) {
 // that covers value, so a payout that stalls ties up as little of the peg as
 // it can; or, if none does alone, the fewest, largest first.
 func selectForPayout(utxos []utxo, value int64) ([]utxo, error) {
-	var best *utxo
-	for i := range utxos {
-		if u := &utxos[i]; u.value >= value && (best == nil || u.value < best.value) {
-			best = u
+	// smallest is the smallest output of at least need.
+	smallest := func(need int64) *utxo {
+		var best *utxo
+		for i := range utxos {
+			if u := &utxos[i]; u.value >= need && (best == nil || u.value < best.value) {
+				best = u
+			}
 		}
+		return best
 	}
-	if best != nil {
+	// Prefer one that leaves the peg its change of at least pegDust, so
+	// nothing is topped up from the payout; else one that just covers it.
+	if best := smallest(value + pegDust); best != nil {
+		return []utxo{*best}, nil
+	}
+	if best := smallest(value); best != nil {
 		return []utxo{*best}, nil
 	}
 	inputs, _, err := selectUTXOs(utxos, value)
