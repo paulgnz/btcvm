@@ -15,15 +15,15 @@
   <p class="meta">Status as of 26 September 2026 · Source: <a href="https://github.com/MetalBlockchain/btc-vm">github.com/MetalBlockchain/btc-vm</a> · Site: <a href="https://metalbtc.com">metalbtc.com</a></p>
 
   <div class="headline">
-    <p><strong>Where it stands.</strong> The chain, the bridge and the web wallet are built for Bitcoin: Bitcoin's rules with SegWit and Taproot from the first block, SegWit deposit addresses, payouts at Bitcoin's live fee rate that can be replaced if they're slow, all tested against btcd's script engine. The software for independent signers, and the ceremony that brings them in, are built too. BTCVM launched as an L1 on Metal mainnet on 25 September 2026, and this site is served by it. The bridge runs on separate signers, and the first mainnet deposits were credited on 26 September 2026. Next: the first withdrawal, to complete the round trip.</p>
+    <p><strong>Where it stands.</strong> The chain, the bridge and the web wallet are built for Bitcoin: Bitcoin's rules with SegWit and Taproot from the first block, SegWit deposit addresses, payouts at Bitcoin's live fee rate that can be replaced if they're slow, all tested against btcd's script engine. The software for independent signers, and the ceremony that brings them in, are built too. BTCVM launched as an L1 on Metal mainnet on 25 September 2026, and this site is served by it. The bridge runs on separate signers, and the first mainnet round trip completed on 26 September 2026: deposits credited on BTCVM, and a withdrawal paid back to Bitcoin.</p>
     <p class="meta">Chain <code>BYogm85qvZxwX4PitKLDPzNDbAgo61nw2NSXx5VVXyZZ8yGUK</code> · Subnet <code>SWJQGgyAvXY1aBczr7WupCGpLmukvP2YdXZJUvqm1td37EcJm</code> · Validator <code>NodeID-HEPafTRm58szWKMBFfKSY1ALEWSKTNyYf</code> · Peg <code>bc1qlvaxxu9etgcwlt9u5wkn5pu4p28a5p4uxs088nmn6c2se3wn08eqls0cla</code></p>
   </div>
 
-  <h2 id="the-first-round-trip">Now: the first round trip</h2>
+  <h2 id="the-first-round-trip">Done: the first round trip</h2>
   <p>A small amount goes each way on mainnet: a deposit from Bitcoin, credited on BTCVM, then a withdrawal paid back to Bitcoin. Each step has a transaction on each chain, visible in the explorer, and proof of reserves matches throughout: BTC locked on Bitcoin equal to BTC circulating on BTCVM plus deposits waiting to be credited.</p>
   <ul>
     <li><strong>Deposits: done.</strong> On 26 September 2026 two deposits from the web wallet were credited on BTCVM, each two minutes after its second Bitcoin confirmation, signed by separate signers. Proof of reserves matched: 0.00033828 BTC locked, 0.00033828 BTC on BTCVM.</li>
-    <li><strong>Withdrawal: next.</strong> A withdrawal paid back to Bitcoin from the locked BTC.</li>
+    <li><strong>Withdrawal: done.</strong> A withdrawal of 10,000 sats was paid on Bitcoin seconds after it was final on BTCVM, signed by separate signers, and confirmed in block 968,622 (<a href="https://mempool.space/tx/6ea8e5adc2100c19a5de73c789945ae69f75faaedb626c2e55e384b208118474">6ea8e5ad…</a>).</li>
   </ul>
 
   <h2>What is built</h2>
@@ -168,19 +168,19 @@
         <li>Web wallet with native SegWit addresses, explorer and proof of reserves.</li>
       </ul>
     </li>
-    <li class="phase now">
-      <div class="phase-head"><h3>Prove the round trip</h3><span class="chip wait">Now</span></div>
+    <li class="phase">
+      <div class="phase-head"><h3>Prove the round trip</h3><span class="chip live">Done</span></div>
       <ul>
         <li><span class="step-tag">Done</span>Launch the L1 on Metal mainnet, and serve this site from it.</li>
         <li><span class="step-tag">Done</span>The bridge's Bitcoin node, pruned Bitcoin Core, synced with Bitcoin.</li>
         <li><span class="step-tag">Done</span>The first mainnet deposits, credited on BTCVM (<a href="#the-first-round-trip">above</a>).</li>
         <li><span class="step-tag">Done</span>The wallet's one-click move from its Bitcoin balance, reviewed and signed in the browser.</li>
-        <li><span class="step-tag todo">Next</span>The first withdrawal, paid back to Bitcoin.</li>
+        <li><span class="step-tag">Done</span>The first withdrawal, paid back to Bitcoin.</li>
         <li><span class="step-tag">Done</span>HTTPS, and daily encrypted backups of the keys, bridge state and the deposit registry, with copies off the server, and a restore checked against the live keys.</li>
       </ul>
       <p class="gate"><strong>Done when</strong> each direction has transaction IDs on both chains, visible in the explorer, and proof of reserves matches.</p>
     </li>
-    <li class="phase">
+    <li class="phase now">
       <div class="phase-head"><h3>Remove single points of failure</h3><span class="chip wait">Partly built</span></div>
       <ul>
         <li><span class="step-tag">Built</span><strong>Signer service.</strong> A bridge process that holds no keys, and a signer service per key holder that checks every transaction against its own nodes before signing, with a signing log and a daily limit.</li>
