@@ -3,8 +3,8 @@
 # directory, checks every file against the manifest, and checks the restored
 # keys are the ones in use:
 #
-#   - the peg signer set's private keys match it, and it controls the live
-#     peg address;
+#   - the peg signer set's private keys (or each separate signer's key)
+#     match it, and it controls the live peg address;
 #   - the staking certificate gives the validator's NodeID;
 #   - the P-Chain key file matches its address.
 #
@@ -52,10 +52,23 @@ bin=$work/bin
 (cd "$repo" && go build -o "$bin/btcvm" ./cmd/btcvm && go build -o "$bin/btcvm-l1" ./cmd/btcvm-l1)
 
 secrets=$root/var/lib/metal-main/secrets
-# The signer set: keys match, and it controls the peg address in use.
-if check=$("$bin/btcvm" signers-check -signers "$secrets/signers.json" -btc-network mainnet -vm-network mainnet 2>&1); then
+# The signer set: keys match, and it controls the peg address in use. With
+# separate signers, each key is in its own signer's directory and is checked
+# alone against the public set.
+set_file=$secrets/signers.json keyflags=() label=""
+if [[ -f $secrets/separate-signers/signers.json ]]; then
+  set_file=$secrets/separate-signers/signers.json
+  for key in "$root"/var/lib/btcvm-signer-*/signer.key; do [[ -f $key ]] && keyflags+=(-key-file "$key"); done
+fi
+if check=$("$bin/btcvm" signers-check -signers "$set_file" ${keyflags[@]+"${keyflags[@]}"} -btc-network mainnet -vm-network mainnet 2>&1); then
   peg=$(jq -r .bitcoinPegAddress <<<"$check")
-  pass "signer set: $(jq -r .privateKeys <<<"$check") private keys, each matching a public key"
+  if [[ ${#keyflags[@]} -gt 0 ]]; then
+    label="$(jq -r .keyFiles <<<"$check") separate signer keys of $(jq -r .publicKeys <<<"$check"), each a different key in the set"
+    [[ $(jq -r .keyFiles <<<"$check") == $(jq -r .publicKeys <<<"$check") ]] || fail "signer keys: only $(jq -r .keyFiles <<<"$check") of $(jq -r .publicKeys <<<"$check") backed up"
+  else
+    label="$(jq -r .privateKeys <<<"$check") private keys, each matching a public key"
+  fi
+  pass "signer set: $label"
   want=$(jq -r .bitcoinPegAddress "$manifest")
   [[ $peg == "$want" ]] && pass "signer set controls the backed-up peg address $peg" || fail "signer set controls $peg, not $want"
   if livepeg=$(curl -s -m 10 "$live/api/info" | jq -r '.pegAddress // empty') && [[ -n $livepeg ]]; then
@@ -78,10 +91,15 @@ want=$(jq -r .pChainAddress "$secrets/p-chain-key.json")
 [[ -n $paddr && $paddr == "$want" ]] && pass "P-Chain key controls $paddr" || fail "P-Chain key gives '$paddr', file says '$want'"
 
 # Everything else a rebuild needs.
-for f in secrets/deposits.json secrets/bridge.env secrets/telegram-token chain.json genesis.json; do
+for f in secrets/bridge.env secrets/telegram-token chain.json genesis.json; do
   [[ -s $root/var/lib/metal-main/$f ]] && pass "$f" || fail "$f missing"
 done
+[[ -s $root/var/lib/metal-main/secrets/deposits.json ]] && pass "deposit address registry" ||
+  echo "  --    no deposit address registry yet (none registered)"
 [[ -s $root/var/lib/bitcoin-main/wallet.dat ]] && pass "Bitcoin watch-only wallet" || fail "Bitcoin wallet missing"
+for w in "$root"/var/lib/bitcoin-main/btcvm-signer-*.wallet.dat; do
+  [[ -s $w ]] && pass "signer wallet $(basename "$w" .wallet.dat)"
+done
 [[ -s $root/etc/caddy/Caddyfile ]] && pass "web server config" || fail "web server config missing"
 units=$(find "$root/etc/systemd/system" -name '*.service' 2>/dev/null | wc -l | tr -d ' ')
 [[ $units -ge 4 ]] && pass "$units service definitions" || fail "only $units service definitions"

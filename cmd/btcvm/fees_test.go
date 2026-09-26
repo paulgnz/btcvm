@@ -1,7 +1,8 @@
 package main
 
 import (
-	"github.com/MetalBlockchain/btcvm/btcd/wire"
+	"os"
+	"path/filepath"
 	"testing"
 	"time"
 
@@ -9,6 +10,7 @@ import (
 
 	"github.com/MetalBlockchain/btcvm/btcd/btcutil"
 	"github.com/MetalBlockchain/btcvm/btcd/chaincfg"
+	"github.com/MetalBlockchain/btcvm/btcd/wire"
 )
 
 // TestPayoutToEveryAddressType pays peg-outs to legacy, SegWit and Taproot
@@ -452,4 +454,38 @@ func TestSigningLogRefusesAfterAConfirmedSignature(t *testing.T) {
 		"the old payment's inputs are gone and it isn't confirmed: it can't confirm")
 	require.ErrorContains(l.permit("payout:x", second, noneUnspent, func(txid string) bool { return txid == first.TxHash().String() }),
 		"in a block")
+}
+
+// TestSignersCheckKeyFiles checks separate signers' keys one file at a time
+// against the public set, as a restore check does: each must be in the set,
+// and no two the same.
+func TestSignersCheckKeyFiles(t *testing.T) {
+	require := require.New(t)
+	full, err := newSignerSet(2, 3)
+	require.NoError(err)
+	dir := t.TempDir()
+	setPath := filepath.Join(dir, "signers.json")
+	require.NoError(full.publicCopy().write(setPath))
+	keyFile := func(name, hexKey string) string {
+		path := filepath.Join(dir, name)
+		require.NoError(os.WriteFile(path, []byte(hexKey+"\n"), 0o600))
+		return path
+	}
+	a := keyFile("a.key", full.PrivateKeys[0])
+	b := keyFile("b.key", full.PrivateKeys[1])
+	again := keyFile("again.key", full.PrivateKeys[0])
+	stranger, err := newSignerSet(1, 1)
+	require.NoError(err)
+	other := keyFile("other.key", stranger.PrivateKeys[0])
+
+	check := func(files ...string) error {
+		args := []string{"-signers", setPath}
+		for _, f := range files {
+			args = append(args, "-key-file", f)
+		}
+		return cmdSignersCheck(args)
+	}
+	require.NoError(check(a, b))
+	require.ErrorContains(check(a, again), "same key")
+	require.ErrorContains(check(a, other), "not one of the set's public keys")
 }

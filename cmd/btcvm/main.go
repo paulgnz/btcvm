@@ -401,6 +401,11 @@ func cmdSignersCheck(args []string) error {
 	var s settings
 	fs := flag.NewFlagSet("signers-check", flag.ExitOnError)
 	signersPath := fs.String("signers", "", "peg signer set file")
+	var keyFiles []string
+	fs.Func("key-file", "a separate signer's key file, to check it's in the set (repeatable)", func(v string) error {
+		keyFiles = append(keyFiles, v)
+		return nil
+	})
 	if err := parseFlags(fs, &s, args); err != nil {
 		return err
 	}
@@ -416,12 +421,30 @@ func cmdSignersCheck(args []string) error {
 			return fmt.Errorf("private key %d is not one of the set's public keys", i)
 		}
 	}
+	// Separate signers' keys are checked one file at a time; they are
+	// never put together.
+	seen := map[int]bool{}
+	for _, path := range keyFiles {
+		key, err := readKeyFile(path)
+		if err != nil {
+			return err
+		}
+		i := signers.indexOf(key.PubKey())
+		if i < 0 {
+			return fmt.Errorf("%s is not one of the set's public keys", path)
+		}
+		if seen[i] {
+			return fmt.Errorf("%s holds the same key as another key file", path)
+		}
+		seen[i] = true
+	}
 	vmAddr, _ := signers.address(s.vmParams)
 	btcAddr, _ := signers.address(s.btcParams)
 	printJSON(map[string]any{
 		"required":          signers.Required,
 		"publicKeys":        len(signers.PublicKeys),
 		"privateKeys":       len(signers.privKeys),
+		"keyFiles":          len(seen),
 		"bitcoinPegAddress": btcAddr.EncodeAddress(),
 		"btcvmReserve":      vmAddr.EncodeAddress(),
 		"fingerprint":       signers.fingerprint(),
