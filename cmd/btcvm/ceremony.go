@@ -622,10 +622,10 @@ BTCVM_RPC=http://127.0.0.1:9650/ext/bc/CHAIN_ID/rpc
 BTCVM_RPC_USER=
 BTCVM_RPC_PASS=
 BITCOIN_NETWORK=%s
-BITCOIN_RPC=http://127.0.0.1:22555
+BITCOIN_RPC=http://127.0.0.1:%d
 BITCOIN_RPC_USER=
 BITCOIN_RPC_PASS=
-`, s.vmNetwork, s.btcNet)
+`, s.vmNetwork, s.btcNet, bitcoinRPCPort(s.btcNet))
 		if err := writeNew(envPath, []byte(env), 0o600); err != nil {
 			return err
 		}
@@ -769,4 +769,15 @@ func setupCheck(args []string) error {
 		}
 	}
 	return nil
+}
+
+// bitcoinRPCPort is Bitcoin Core's default RPC port on network.
+func bitcoinRPCPort(network string) int {
+	switch network {
+	case "testnet":
+		return 18332
+	case "regtest":
+		return 18443
+	}
+	return 8332
 }
