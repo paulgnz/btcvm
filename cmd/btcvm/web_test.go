@@ -206,3 +206,16 @@ func TestWebUnits(t *testing.T) {
 	require.NoError(t, err, string(out))
 	require.Equal(t, "ok\n", string(out))
 }
+
+// TestWebAddressBook runs the web wallet's address-book checks: only valid
+// addresses are saved, names and the book are capped, stored entries are
+// re-checked on load, and lookups match an address for its network.
+func TestWebAddressBook(t *testing.T) {
+	node, err := exec.LookPath("node")
+	if err != nil {
+		t.Skip("node is not installed")
+	}
+	out, err := exec.Command(node, "testdata/addressbook_check.mjs").CombinedOutput()
+	require.NoError(t, err, string(out))
+	require.Equal(t, "ok\n", string(out))
+}
