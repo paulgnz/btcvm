@@ -2,6 +2,7 @@ import * as chain from './chain.js';
 import * as passkey from './passkey.js';
 import * as units from './units.js';
 import { confirmationsFor, describeTiers } from './tiers.js';
+import { createAddressBook } from './addressbook-ui.js';
 
 const $ = (id) => document.getElementById(id);
 const KEY_STORE = 'btcvm.key';
@@ -23,6 +24,11 @@ let seenBTC = null;
 // Confirmed balances as the API gives them, or null until loaded.
 let vmBalance = null;
 let btcBalance = null;
+// The address book, and its pickers on the Send and Withdraw forms; null
+// until the book has started (see startAddressBook).
+let addressBook = null;
+let sendPicker = null;
+let withdrawPicker = null;
 
 // generation counts key changes. Work started for one key checks it before
 // touching the page, so a slow response never shows under another key.
@@ -512,6 +518,7 @@ function renderAvailable() {
   else box(send, 'BTCVM', vmBalance, 'Loading…');
   box($('withdraw-available'), 'BTCVM', vmBalance, 'Loading…');
   renderFees(onBTC);
+  if (sendPicker) sendPicker.refresh(); // what is typed may be saved for the other network
 }
 
 // renderFees says what a payment costs, before it's sent: on BTCVM a
@@ -833,7 +840,7 @@ const networks = {
 
 // --- review before signing ----------------------------------------------------
 
-function reviewLine(label, address, value, note, cls) {
+function reviewLine(label, address, value, note, cls, saved) {
   const li = document.createElement('li');
   if (cls) li.className = cls;
   const add = (tag, className, text) => {
@@ -844,6 +851,12 @@ function reviewLine(label, address, value, note, cls) {
   };
   add('span', 'review-label', label);
   add('span', 'review-amount', value === null ? '' : showExact(value));
+  // A saved name labels the address; the full address is still shown.
+  if (address && saved) {
+    add('span', `review-saved${saved.sameNetwork ? '' : ' warn'}`, saved.sameNetwork
+      ? `Saved as "${saved.name}"`
+      : `Saved as "${saved.name}", for ${saved.network === 'btc' ? 'Bitcoin' : 'BTCVM'}. Check it is right to pay it here.`);
+  }
   if (address) add('span', 'review-address', address);
   if (note) add('p', 'review-note', note);
   return li;
@@ -869,7 +882,7 @@ function review(plan, network, context = {}) {
     } else if (o.data) {
       const dest = chain.pegOutDestination(o.data, info.bitcoinVersions);
       if (dest && context.withdrawTo === dest) {
-        lines.push(reviewLine('The bridge then pays on Bitcoin', dest, null));
+        lines.push(reviewLine('The bridge then pays on Bitcoin', dest, null, null, null, savedAs(dest, 'btc')));
       } else {
         problems.push('The transaction carries a bridge instruction this page did not ask for.');
       }
@@ -882,7 +895,7 @@ function review(plan, network, context = {}) {
       lines.push(reviewLine('To your deposit address', o.address, o.value,
         `Credited as ${showSats(gets > 0n ? gets : 0n)} on BTCVM after ${confirmationsFor(info, o.value)} Bitcoin confirmation${confirmationsFor(info, o.value) === 1 ? '' : 's'}, less the ${show(info.vmFee)} bridge fee.`));
     } else if (o.address) {
-      lines.push(reviewLine('To', o.address, o.value));
+      lines.push(reviewLine('To', o.address, o.value, null, null, savedAs(o.address, network)));
     } else {
       problems.push('The transaction pays a script this page cannot read.');
     }
@@ -1132,7 +1145,7 @@ function renderInflight() {
     const paid = p.status === 'paid';
     const detail = paid ? `${show(p.pays)} is on its way; it confirms in the next Bitcoin block, usually within about 10 minutes. If fees rise and it waits half an hour, the bridge resends it with a higher fee.`
       : final ? 'The bridge pays it within seconds.' : 'Waiting for it to be final on BTCVM, a few seconds.';
-    const c = card(`Withdrawing ${show(w.amount)} to Bitcoin`,
+    const c = card(`Withdrawing ${show(w.amount)} to ${savedName(w.to, 'btc') || 'Bitcoin'}`,
       steps([['Final on BTCVM', final], ['Paid on Bitcoin', paid], ['In a Bitcoin block', false]]), detail);
     cards.push(paid ? btcWaiting(c) : c);
   }
@@ -1143,7 +1156,7 @@ function renderInflight() {
     const change = BigInt(o.change);
     const back = change > 0n ? ` ${showSats(change)} change comes back when it confirms.` : '';
     const title = o.kind === 'move' ? `Moving ${showSats(BigInt(o.amount))} to BTCVM`
-      : `Sending ${showSats(BigInt(o.amount))} on Bitcoin`;
+      : `Sending ${showSats(BigInt(o.amount))}${savedName(o.to, 'btc') ? ` to ${savedName(o.to, 'btc')}` : ''} on Bitcoin`;
     cards.push(btcWaiting(card(title, steps([['Sent', true], ['In a Bitcoin block', false]]),
       `Waiting for a Bitcoin block, usually within about 10 minutes.${back}`)));
   }
@@ -1179,6 +1192,7 @@ $('send-form').addEventListener('submit', async (e) => {
     if (unknown) showResult($('send-result'), unknownOutcome, false, txid, network);
     else showResult($('send-result'), `Sent ${where}. Transaction:`, true, txid, network);
     $('send-to').value = '';
+    sendPicker?.clear();
     resetAmount('send-amount');
   } catch (err) {
     showFailure($('send-result'), err);
@@ -1319,6 +1333,7 @@ $('withdraw-form').addEventListener('submit', async (e) => {
     if (unknown) showResult($('withdraw-result'), unknownOutcome, false, txid);
     else showResult($('withdraw-result'), 'Withdrawal sent. The bridge pays out once it is in a block. Transaction:', true, txid);
     $('withdraw-form').reset();
+    withdrawPicker?.clear();
     resetAmount('withdraw-amount');
   } catch (err) {
     // The bridge refused it, so it will never be paid; forget it.
@@ -1334,6 +1349,7 @@ $('withdraw-form').addEventListener('submit', async (e) => {
 $('withdraw-to-mine').addEventListener('click', () => {
   if (!key) return;
   $('withdraw-to').value = myBTCAddress();
+  withdrawPicker?.refresh();
   $('withdraw-amount').focus();
 });
 
@@ -1341,7 +1357,8 @@ async function renderWithdrawals() {
   if (!key) return;
   const gen = generation;
   const rows = savedWithdrawals().map((w) => {
-    const li = item(`${show(w.amount)} to ${w.to.slice(0, 8)}…`, { text: 'Checking…', class: 'status-waiting' });
+    const name = savedName(w.to, 'btc');
+    const li = item(`${show(w.amount)} to ${name ? `${name} (${w.to.slice(0, 8)}…)` : `${w.to.slice(0, 8)}…`}`, { text: 'Checking…', class: 'status-waiting' });
     api(`/api/pegout/${w.txid}`).then((p) => {
       if (gen !== generation) return;
       if (p.status === 'paid') {
@@ -1372,6 +1389,46 @@ $('faucet-claim').addEventListener('click', async (e) => {
     e.target.disabled = false;
   }
 });
+
+// --- address book ----------------------------------------------------------------
+
+// Saved names for addresses, in this browser only (addressbook-ui.js). The
+// book starts once the network's address formats are known.
+const versionsFor = (network) => (network === 'btc' ? info.bitcoinVersions : info.btcvmVersions);
+
+// savedAs is what the book knows of an address on a network, or null.
+const savedAs = (address, network) => (addressBook && address ? addressBook.lookup(address, network) : null);
+const savedName = (address, network) => savedAs(address, network)?.name || '';
+
+function startAddressBook() {
+  try {
+    addressBook = createAddressBook({
+      $, store,
+      // The forms' own decoder: an address is saved as it reads back.
+      decode: (address, network) => chain.encodeAddress(chain.decodeAddress(address, versionsFor(network)), versionsFor(network)),
+    });
+    sendPicker = addressBook.attach({
+      input: $('send-to'),
+      network: () => document.querySelector('input[name=send-network]:checked').value,
+      // An address saved for the other network switches the Send form to
+      // it, if it can: the review still shows which network pays.
+      onPick: (e) => {
+        const radio = document.querySelector(`input[name=send-network][value=${e.network}]`);
+        if (radio && !radio.disabled && !radio.checked) {
+          radio.checked = true;
+          radio.dispatchEvent(new Event('change', { bubbles: true }));
+        }
+      },
+    });
+    withdrawPicker = addressBook.attach({ input: $('withdraw-to'), network: () => 'btc', only: true });
+  } catch (err) {
+    // The wallet works without its address book.
+    addressBook = null;
+    sendPicker = null;
+    withdrawPicker = null;
+    console.error('address book unavailable:', err);
+  }
+}
 
 // --- unit toggle and amount fields -------------------------------------------------
 
@@ -1524,6 +1581,7 @@ async function start() {
   }
   $('wallet-start').textContent = '';
   $('wallet-start').className = 'result';
+  startAddressBook();
   const saved = store.get(KEY_STORE);
   if (saved) {
     try {

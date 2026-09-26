@@ -169,6 +169,27 @@
             </details>
           </section>
 
+          <details class="address-book" id="ab-details">
+            <summary>Address book <span id="ab-count"></span></summary>
+            <p class="muted">Names for addresses you pay, kept in this browser only. A name is only a label: always check the full address before you confirm a payment.</p>
+            <p class="notice" id="ab-warning" role="alert" hidden></p>
+            <ul class="ab-list" id="ab-list"></ul>
+            <form id="ab-add" class="stack ab-add">
+              <h3>Add an address</h3>
+              <label for="ab-add-name">Name</label>
+              <input class="ab-name-input" id="ab-add-name" maxlength="60" autocomplete="off" placeholder="e.g. Mum" required>
+              <label for="ab-add-address">Address</label>
+              <input id="ab-add-address" autocomplete="off" spellcheck="false" required>
+              <fieldset class="network-choice">
+                <legend>For</legend>
+                <label><input type="radio" name="ab-add-network" value="btc" checked> Bitcoin</label>
+                <label><input type="radio" name="ab-add-network" value="vm"> BTCVM</label>
+              </fieldset>
+              <button type="submit">Save address</button>
+              <p class="result" id="ab-add-result" aria-live="polite"></p>
+            </form>
+          </details>
+
           <details class="key-details" id="key-details">
             <summary>Show or remove your key</summary>
             <p>Back this up to use the same key elsewhere, for example with <code>btcvm</code>. The Bitcoin encoding imports into Bitcoin Core.</p>
@@ -190,7 +211,26 @@
           </fieldset>
           <div class="available" id="send-available" aria-live="polite"></div>
           <label for="send-to">To address</label>
-          <input id="send-to" autocomplete="off" spellcheck="false" required>
+          <div class="ab-combo">
+            <input id="send-to" autocomplete="off" spellcheck="false" required aria-describedby="send-to-saved">
+            <ul class="ab-options" id="send-to-book" role="listbox" aria-label="Saved addresses" hidden></ul>
+          </div>
+          <p class="ab-note" id="send-to-saved" aria-live="polite" hidden></p>
+          <div class="ab-save" id="send-to-save" hidden>
+            <button type="button" class="link-button" id="send-to-save-open">Save this address</button>
+            <div class="ab-save-form" id="send-to-save-form" hidden>
+              <label for="send-to-save-name">Name</label>
+              <input class="ab-name-input" id="send-to-save-name" maxlength="60" autocomplete="off" placeholder="e.g. Kraken deposit">
+              <label for="send-to-save-network">For</label>
+              <select id="send-to-save-network">
+                <option value="vm">BTCVM</option>
+                <option value="btc">Bitcoin</option>
+              </select>
+              <button type="button" id="send-to-save-confirm">Save</button>
+              <button type="button" id="send-to-save-cancel">Cancel</button>
+            </div>
+          </div>
+          <p class="ab-save-result" id="send-to-save-result" aria-live="polite"></p>
           <div class="amount-label"><label for="send-amount">Amount (<span id="send-amount-unit">BTC</span>)</label>
             <div class="unit-toggle compact" role="group" aria-label="Enter the amount in">
               <button type="button" data-unit="btc" aria-pressed="true">BTC</button>
@@ -254,7 +294,21 @@
           <p>The bridge pays your Bitcoin address once the withdrawal is final on BTCVM, in seconds, less the Bitcoin network fee, about <span id="btc-fee">…</span> today. The payment then confirms in the next Bitcoin block it makes, usually about 10 minutes. The minimum is <span id="min-pegout">…</span>.</p>
           <div class="available available-vm" id="withdraw-available" aria-live="polite"></div>
           <label for="withdraw-to">To Bitcoin address</label>
-          <input id="withdraw-to" autocomplete="off" spellcheck="false" required>
+          <div class="ab-combo">
+            <input id="withdraw-to" autocomplete="off" spellcheck="false" required aria-describedby="withdraw-to-saved">
+            <ul class="ab-options" id="withdraw-to-book" role="listbox" aria-label="Saved addresses" hidden></ul>
+          </div>
+          <p class="ab-note" id="withdraw-to-saved" aria-live="polite" hidden></p>
+          <div class="ab-save" id="withdraw-to-save" hidden>
+            <button type="button" class="link-button" id="withdraw-to-save-open">Save this address</button>
+            <div class="ab-save-form" id="withdraw-to-save-form" hidden>
+              <label for="withdraw-to-save-name">Name</label>
+              <input class="ab-name-input" id="withdraw-to-save-name" maxlength="60" autocomplete="off" placeholder="e.g. Kraken deposit">
+              <button type="button" id="withdraw-to-save-confirm">Save</button>
+              <button type="button" id="withdraw-to-save-cancel">Cancel</button>
+            </div>
+          </div>
+          <p class="ab-save-result" id="withdraw-to-save-result" aria-live="polite"></p>
           <button type="button" class="link-button" id="withdraw-to-mine">Use my Bitcoin address</button>
           <div class="amount-label"><label for="withdraw-amount">Amount (<span id="withdraw-amount-unit">BTC</span>)</label>
             <div class="unit-toggle compact" role="group" aria-label="Enter the amount in">
