@@ -93,28 +93,27 @@ It copies each key to its own signer directory under
 checks the keys and their order match the live set's, and writes a service
 file per signer. It starts nothing. `rm -r` the directory undoes it.
 
-Before starting the signers, refresh each one's copy of the deposit
+Before installing the signers, refresh each one's copy of the deposit
 registry, since addresses registered after staging aren't in it:
 
 ```sh
 S=/var/lib/metal-main/secrets/separate-signers
-for n in 1 2 3; do sudo -u btcvm cp /var/lib/metal-main/secrets/deposits.json $S/signer$n/deposits.json; done
+for n in 1 2 3; do [ -f /var/lib/metal-main/secrets/deposits.json ] && sudo -u btcvm cp /var/lib/metal-main/secrets/deposits.json $S/signer$n/deposits.json; done
 ```
 
-### Start the signers
+### Install and start the signers
 
 ```sh
-S=/var/lib/metal-main/secrets/separate-signers
-for n in 1 2 3; do cp $S/signer$n/btcvm-signer-$n.service /etc/systemd/system/; done
-systemctl daemon-reload
-systemctl enable --now btcvm-signer-1 btcvm-signer-2 btcvm-signer-3
-for n in 1 2 3; do
-  sudo -u btcvm bash -c "set -a; . $S/signer$n/signer.env; exec /opt/btcvm/bin/btcvm signer-setup check -dir $S/signer$n"
-done
+deploy/install-signers.sh
 ```
 
-Every check should pass, including that each signer refuses an unsigned
-request.
+It gives each signer its own system user (`btcvm-signer-N`), moves its
+directory to `/var/lib/btcvm-signer-N` (mode 700), gives it its own
+watch-only Bitcoin Core wallet, runs it from a root-owned copy of the binary
+(`/usr/local/lib/btcvm/btcvm`, which `deploy/provision.sh` keeps up to date),
+starts it, and runs `signer-setup check`. Every check should pass, including
+that each signer refuses an unsigned request; only "still syncing" is
+tolerated while Bitcoin Core catches up.
 
 ### Switch the bridge
 
@@ -128,7 +127,11 @@ are:
 -coordinator-key-file /var/lib/metal-main/secrets/separate-signers/coordinator/coordinator.key
 ```
 
-Point the web and monitor services' `-signers` at the same public set. Then:
+Point the web and monitor services' `-signers` at the same public set, and
+give all three `-deposits /var/lib/metal-main/secrets/deposits.json`, so the
+registry stays where it was (by default it sits next to `-signers`).
+`deploy/mainnet.sh launch` writes these units itself once the staged set
+exists. Then:
 
 ```sh
 systemctl daemon-reload
@@ -144,15 +147,19 @@ what it signed. Health stays `ok`.
 
 ### Retire the combined key file
 
-Once a backup has run with the signer directories in it (`btcvm-backup run`,
-then `scripts/restore-check.sh` on your Mac), move
-`/var/lib/metal-main/secrets/signers.json` out of service and delete it,
-including from old backups when they age out. From then on each key exists
-only in its signer's directory and in the backups.
+Move `/var/lib/metal-main/secrets/signers.json` (and `signers.public.json`)
+out of service at once, to a root-only directory such as
+`/root/retired-keys`, so no command can run against the old set by mistake:
+a pause written next to it wouldn't reach the bridge. Once a backup has run
+with the signer directories in it (`btcvm-backup run`, then
+`scripts/restore-check.sh` on your Mac), delete it, and let old backups that
+hold it age out. From then on each key exists only in its signer's directory
+and in the backups.
 
 ### Roll back
 
-Stop the signers, put the old `-signers` path back in the three services,
+Stop the signers, move the retired `signers.json` and `signers.public.json`
+back, put the old `-signers` paths back in the three services,
 drop the coordinator flags, and restart. The peg address never changed, so
 nothing on either chain needs to move.
 

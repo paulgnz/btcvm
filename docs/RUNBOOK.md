@@ -7,8 +7,17 @@ secrets in `/var/lib/metal-main/secrets`, Bitcoin Core's data in
 
 ```sh
 S=/var/lib/metal-main/secrets
+SET=$S/separate-signers/signers.json   # the public signer set the bridge runs with
+REG="-deposits $S/deposits.json"         # the deposit address registry
+COORD="-cosigners $S/separate-signers/cosigners.json -coordinator-key-file $S/separate-signers/coordinator/coordinator.key"
 bv() { sudo -u btcvm env HOME=/opt/btcvm $(cat $S/bridge.env | xargs) /opt/btcvm/bin/btcvm "$@"; }
 ```
+
+The pause, the bridge lock and (unless `-deposits` says otherwise) the
+registry sit next to the signer set file, so always name the one in the
+bridge's `ExecStart`. The host holds no signer keys: each signer runs as its
+own user from `/var/lib/btcvm-signer-N`, and can be paused on its own with
+`btcvm pause -dir /var/lib/btcvm-signer-N`.
 
 ## First: pause
 
@@ -17,7 +26,7 @@ second. A pause is safe: nothing is lost, and deposits and withdrawals made
 while paused are processed after it ends.
 
 ```sh
-bv pause -signers $S/signers.json -reason "Investigating an alert. Funds are safe."
+bv pause -signers $SET -reason "Investigating an alert. Funds are safe."
 ```
 
 Within seconds:
@@ -30,7 +39,7 @@ Within seconds:
 To resume, once the cause is understood and fixed:
 
 ```sh
-bv resume -signers $S/signers.json
+bv resume -signers $SET
 ```
 
 With separate signers, each operator can also pause their own signer:
@@ -51,7 +60,7 @@ The monitor checks every minute and alerts on Telegram when a check changes.
 
 | Check | Failing means | Do |
 | --- | --- | --- |
-| `peg` | Locked BTC no longer covers circulating BTC plus pending transfers. The bridge has already stopped itself. | Pause. Run `bv audit -signers $S/signers.json`, and compare proof of reserves on the site with a public Bitcoin explorer. Don't resume until the difference is explained. |
+| `peg` | Locked BTC no longer covers circulating BTC plus pending transfers. The bridge has already stopped itself. | Pause. Run `bv audit -signers $SET $REG`, and compare proof of reserves on the site with a public Bitcoin explorer. Don't resume until the difference is explained. |
 | `pause` | The bridge is paused. | Expected during an incident. Confirm who paused it and why (`cat $S/paused.json`). |
 | `bridge` | A deposit or withdrawal is well past due. | `journalctl -u btcvm-bridge-main -n 50`. Common causes: a node behind, the circulating cap reached (the deposit waits), or signers unreachable. A payout waiting on a slow Bitcoin block is not stuck: the bridge replaces it with a higher fee after 30 minutes if fees have risen. |
 | `bitcoin` | Bitcoin Core is down, still syncing, or its latest block is over 90 minutes old. | `systemctl status bitcoind-main`; restart it if stopped. Bitcoin blocks come about every 10 minutes at random, so an old block alone can be a slow block. While it syncs, deposits wait and nothing is lost. |
@@ -61,7 +70,7 @@ The monitor checks every minute and alerts on Telegram when a check changes.
 ## A deposit that hasn't arrived
 
 ```sh
-bv refund -signers $S/signers.json -list     # held or not yet credited, and why
+bv refund -signers $SET $REG $COORD -list     # held or not yet credited, and why
 ```
 
 - **Waiting for confirmations** (2 for up to 0.001 BTC, 3 up to 0.005, 6 above; about 10 minutes each): nothing to do.
@@ -69,8 +78,8 @@ bv refund -signers $S/signers.json -list     # held or not yet credited, and why
 - **Above the maximum deposit, below the minimum, or no destination:** refund it.
 
 ```sh
-bv refund -signers $S/signers.json -deposit TXID:VOUT            # back to the sender
-bv refund -signers $S/signers.json -deposit TXID:VOUT -to BTCADDR
+bv refund -signers $SET $REG $COORD -deposit TXID:VOUT            # back to the sender
+bv refund -signers $SET $REG $COORD -deposit TXID:VOUT -to BTCADDR
 ```
 
 - **Not listed at all:** the deposit was probably paid to a personal deposit
@@ -81,7 +90,7 @@ bv refund -signers $S/signers.json -deposit TXID:VOUT -to BTCADDR
   enough that the node still has the block:
 
   ```sh
-  bv import-deposit -signers $S/signers.public.json -txid TXID -block BLOCKHASH
+  bv import-deposit -signers $SET -txid TXID -block BLOCKHASH
   ```
 
   It's then credited, or held for a refund, on the bridge's next pass.

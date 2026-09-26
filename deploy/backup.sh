@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # Encrypted backups of everything a BTCVM mainnet host can't rebuild from
-# the chains: the peg signer set, the P-Chain key, the validator's staking
+# the chains: the peg signer set (and each separate signer's key, signing
+# log and settings), the P-Chain key, the validator's staking
 # identity, the deposit address registry, the watch-only Bitcoin wallet, and
 # the service configuration. Run as root on the host:
 #
@@ -78,6 +79,7 @@ cmd_run() {
     "$STATE/node/staking"
     "$BTC_DIR/bitcoin.conf"
     /etc/caddy/Caddyfile
+    /var/lib/btcvm-signer-*
   )
   for unit in /etc/systemd/system/{metal-mainnet,bitcoind-main,btcvm-bridge-main,btcvm-web-main,btcvm-monitor-main,btcvm-signer-1,btcvm-signer-2,btcvm-signer-3}.service; do
     [[ -f $unit ]] && files+=("$unit")
@@ -88,18 +90,27 @@ cmd_run() {
     cp -a "$f" "$root$(dirname "$f")/"
   done
 
-  # The bridge's watch-only wallet, copied consistently by Bitcoin Core
-  # itself. A pruned node can't rescan old blocks, so this copy is the only
-  # way back to the peg's history if the wallet is lost.
-  local wallet=btcvm-wallet-$stamp.dat
+  # The watch-only wallets (the bridge's, and each signer's), copied
+  # consistently by Bitcoin Core itself. A pruned node can't rescan old
+  # blocks, so these copies are the only way back to the peg's history if a
+  # wallet is lost.
   install -d -o btcvm -g btcvm -m 700 "$BTC_DIR/backups"
-  if sudo -u btcvm /opt/bitcoin/bin/bitcoin-cli -datadir="$BTC_DIR" -rpcwallet=btcvm \
-    backupwallet "$BTC_DIR/backups/$wallet" 2>/dev/null && [[ -f "$BTC_DIR/backups/$wallet" ]]; then
-    mkdir -p "$root$BTC_DIR"
-    mv "$BTC_DIR/backups/$wallet" "$root$BTC_DIR/wallet.dat"
-  else
-    log "could not back up the Bitcoin wallet (is bitcoind running?)"
-  fi
+  mkdir -p "$root$BTC_DIR"
+  local name wallets=(btcvm)
+  for dir in /var/lib/btcvm-signer-*; do
+    if [[ -d $dir ]]; then wallets+=("$(basename "$dir")"); fi
+  done
+  for name in "${wallets[@]}"; do
+    local copy=$BTC_DIR/backups/$name-$stamp.dat
+    if sudo -u btcvm /opt/bitcoin/bin/bitcoin-cli -datadir="$BTC_DIR" -rpcwallet="$name" \
+      backupwallet "$copy" 2>/dev/null && [[ -f $copy ]]; then
+      local dest=$root$BTC_DIR/wallet.dat
+      [[ $name != btcvm ]] && dest=$root$BTC_DIR/$name.wallet.dat
+      mv "$copy" "$dest"
+    else
+      log "could not back up the Bitcoin wallet $name (is bitcoind running?)"
+    fi
+  done
 
   # A manifest, so a restore can be checked against what was live.
   local node_id peg

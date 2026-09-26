@@ -19,7 +19,7 @@
 #   BRIDGE_ENV  node settings to give each signer
 #   REGISTRY    the bridge's deposit address registry, copied to each signer
 #   RUN_AS      the user the signers run as; empty for the current user
-#   MAX_DAILY   most satoshis each signer approves moving in 24 hours
+#   MAX_DAILY   most BTC each signer approves moving in 24 hours
 #   NETWORK     Bitcoin and BTCVM network
 #   POLICY      the bridge's policy flags; must match its service
 set -euo pipefail
@@ -30,7 +30,7 @@ BTCVM=${BTCVM-/opt/btcvm/bin/btcvm}
 BRIDGE_ENV=${BRIDGE_ENV-/var/lib/metal-main/secrets/bridge.env}
 REGISTRY=${REGISTRY-/var/lib/metal-main/secrets/deposits.json}
 RUN_AS=${RUN_AS-btcvm}
-MAX_DAILY=${MAX_DAILY-10000000}
+MAX_DAILY=${MAX_DAILY-0.1}
 NETWORK=${NETWORK-mainnet}
 POLICY=${POLICY--confirmations 6 -confirmation-tiers 0.001:2,0.005:3 -max-deposit 1000000 -max-circulating 10000000 -min-fee-rate 1 -max-fee-rate 50}
 
@@ -102,5 +102,6 @@ Peg address $peg (unchanged from the live set)
   $STAGE/signers.json           the set, public keys only
   $STAGE/cosigners.json         where the coordinator reaches the signers
 
-The switch is in docs/FIRST-ROUND-TRIP.md. To undo staging: rm -r $STAGE
+Next, as root: deploy/install-signers.sh (one user per signer), then the
+switch in docs/FIRST-ROUND-TRIP.md. To undo staging: rm -r $STAGE
 EOF

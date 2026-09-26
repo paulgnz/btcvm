@@ -78,6 +78,12 @@ fi
   as_btcvm go build -o "$STATE/plugins/$VMID" ./cmd/btcvm-plugin
 )
 ln -sf "$HOME_DIR/bin/btcvm" /usr/local/bin/btcvm
+# Separate signers (deploy/install-signers.sh) run a root-owned copy, which
+# the btcvm user can't replace. Update it too, and restart them.
+if [[ -d /usr/local/lib/btcvm ]]; then
+  install -o root -g root -m 755 "$HOME_DIR/bin/btcvm" /usr/local/lib/btcvm/btcvm
+  systemctl try-restart 'btcvm-signer-*.service'
+fi
 
 log "Bitcoin Core $BITCOIN_VERSION"
 if ! /opt/bitcoin/bin/bitcoind -version 2>/dev/null | grep -q "v$BITCOIN_VERSION"; then

@@ -9,7 +9,9 @@
 #   - the Metal mainnet node (metal-mainnet.service) has synced the P-Chain;
 #   - the P-Chain key in $SECRETS/p-chain-key.json holds enough METAL: about
 #     5 METAL prepays the validator's continuous fee for several months;
-#   - the peg signer set is in $SECRETS/signers.json.
+#   - the peg signer set is in $SECRETS/signers.json, or, once the keys are
+#     split out (deploy/stage-signers.sh, deploy/install-signers.sh), the
+#     public set, cosigners and coordinator key in $SECRETS/separate-signers.
 # Bitcoin Core (bitcoind-main.service) may still be syncing: deposits are
 # credited once it has caught up. It runs pruned (deploy/provision.sh):
 # about 100 GB of disk; the first sync takes a day or more.
@@ -19,8 +21,8 @@
 # monitors.
 #
 # Launch is safe to re-run; it reuses the chain it created. It caps what the
-# bridge credits (MAX_DEPOSIT and MAX_CIRCULATING, in BTC) because one
-# process holds every peg signer key.
+# bridge credits (MAX_DEPOSIT and MAX_CIRCULATING, in BTC) because every
+# peg signer key is on this one host.
 set -euo pipefail
 
 STATE=/var/lib/metal-main
@@ -103,10 +105,19 @@ ENV
   chown btcvm:btcvm "$SECRETS/bridge.env" && chmod 600 "$SECRETS/bridge.env"
 
   # The web server and monitor never sign, so they get the signer set
-  # without its private keys: only the bridge holds those.
-  jq 'del(.privateKeys)' "$SECRETS/signers.json" >"$SECRETS/signers.public.json"
-  chown btcvm:btcvm "$SECRETS/signers.public.json"
-  local policy="-signers $SECRETS/signers.json -confirmations $CONFIRMATIONS \
+  # without its private keys. With separate signers nothing here holds a
+  # key: the bridge only coordinates, and each signer runs as its own user.
+  local split=$SECRETS/separate-signers public keyed coordinate=""
+  if [[ -f $split/signers.json ]]; then
+    public=$split/signers.json keyed=$public
+    coordinate="-cosigners $split/cosigners.json -coordinator-key-file $split/coordinator/coordinator.key"
+  else
+    public=$SECRETS/signers.public.json keyed=$SECRETS/signers.json
+    jq 'del(.privateKeys)' "$keyed" >"$public"
+    chown btcvm:btcvm "$public"
+  fi
+  # The registry is pinned, so it doesn't move when the signer set does.
+  local policy="-deposits $SECRETS/deposits.json -confirmations $CONFIRMATIONS \
 -max-deposit $(satoshis "$MAX_DEPOSIT") -max-circulating $(satoshis "$MAX_CIRCULATING") -min-fee-rate 1 -max-fee-rate 50 -confirmation-tiers $TIERS"
   local health="-validation-id $(jq -r .validationID "$STATE/chain.json") -pchain-uri $NODE_API/ext/bc/P"
   [[ -f "$SECRETS/alert-webhook" ]] && health="$health -webhook $(cat "$SECRETS/alert-webhook")"
@@ -114,9 +125,9 @@ ENV
   [[ -f "$SECRETS/telegram-token" && -f "$SECRETS/telegram-chat" ]] &&
     alerts="-telegram-token-file $SECRETS/telegram-token -telegram-chat $(cat "$SECRETS/telegram-chat")"
   for unit in bridge web monitor; do
-    local exec="$BIN/btcvm bridge $policy -interval 30s"
-    [[ $unit == web ]] && exec="$BIN/btcvm serve ${policy/signers.json/signers.public.json} ${health% -webhook*} -btc-index $STATE/btcindex -chain-id $chain -listen 127.0.0.1:8081"
-    [[ $unit == monitor ]] && exec="$BIN/btcvm monitor ${policy/signers.json/signers.public.json} $health $alerts"
+    local exec="$BIN/btcvm bridge -signers $keyed $coordinate $policy -interval 30s"
+    [[ $unit == web ]] && exec="$BIN/btcvm serve -signers $public $policy ${health% -webhook*} -btc-index $STATE/btcindex -chain-id $chain -listen 127.0.0.1:8081"
+    [[ $unit == monitor ]] && exec="$BIN/btcvm monitor -signers $public $policy $health $alerts"
     cat >"/etc/systemd/system/btcvm-$unit-main.service" <<UNIT
 [Unit]
 Description=BTCVM $unit (Metal mainnet, Bitcoin mainnet)
