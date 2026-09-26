@@ -229,9 +229,35 @@ function renderPeg() {
   $('pending-out').textContent = show(a.pendingPegOuts);
 }
 
+// renderConnection sets the light over the block heights: green when this
+// page reaches the bridge, its live updates are flowing and its Bitcoin node
+// is caught up; orange while connecting, syncing or paused; red when the
+// bridge can't be reached or its Bitcoin node is offline.
+let lastStatus = null;
+let statusFailed = false;
+let eventStream = null;
+function renderConnection() {
+  const s = lastStatus;
+  const sync = s && s.bitcoinSync;
+  let state = 'wait';
+  let text = 'Connecting…';
+  if (statusFailed) [state, text] = ['down', "Can't reach the bridge"];
+  else if (!s) [state, text] = ['wait', 'Connecting…'];
+  else if (sync && sync.available === false) [state, text] = ['down', "The bridge's Bitcoin node is offline"];
+  else if (sync && sync.syncing) [state, text] = ['wait', 'Bitcoin node syncing'];
+  else if (s.paused) [state, text] = ['wait', 'Connected, bridge paused'];
+  else if (!eventStream || eventStream.readyState !== EventSource.OPEN) [state, text] = ['wait', 'Connected, reconnecting live updates…'];
+  else [state, text] = ['live', 'Connected and synced'];
+  $('conn').className = `conn ${state}`;
+  if ($('conn-text').textContent !== text) $('conn-text').textContent = text;
+}
+
 async function refreshStatus() {
   try {
     const s = await api('/api/status');
+    lastStatus = s;
+    statusFailed = false;
+    renderConnection();
     // An emergency pause: nothing is credited or paid until it ends.
     const band = $('pause-band');
     band.hidden = !s.paused;
@@ -316,6 +342,8 @@ async function refreshStatus() {
     if ($('verdict').textContent !== verdict) $('verdict').textContent = verdict;
     $('verdict').className = cls;
   } catch (err) {
+    statusFailed = true;
+    renderConnection();
     $('verdict').textContent = `Can't reach the bridge: ${err.message}`;
     $('verdict').className = 'peg-verdict bad';
   }
@@ -1632,6 +1660,9 @@ function soon(fn) {
 // as soon as it is final. The browser reconnects by itself if it drops.
 function listenForBlocks() {
   const stream = new EventSource('/api/events');
+  eventStream = stream;
+  stream.addEventListener('open', renderConnection);
+  stream.addEventListener('error', renderConnection);
   stream.addEventListener('block', (e) => {
     let chain;
     try { ({ chain } = JSON.parse(e.data)); } catch { return; }
